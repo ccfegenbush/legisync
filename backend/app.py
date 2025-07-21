@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 import logging
+import pinecone
+from pinecone import Pinecone
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +36,18 @@ app = FastAPI()
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "legisync-backend"}
+
+# Debug endpoint to check system status
+@app.get("/debug/status")
+async def debug_status():
+    return {
+        "pinecone_api_key": bool(os.getenv("PINECONE_API_KEY")),
+        "voyage_api_key": bool(os.getenv("VOYAGE_API_KEY")),
+        "google_api_key": bool(os.getenv("GOOGLE_API_KEY")),
+        "index_name": os.getenv("PINECONE_INDEX_NAME", "bills-index-dev"),
+        "vectorstore_initialized": vectorstore is not None,
+        "pinecone_client_initialized": pc is not None
+    }
 
 # Add CORS middleware
 app.add_middleware(
@@ -70,6 +84,14 @@ else:
     def traceable(func):
         return func
 
+# Initialize Pinecone client
+try:
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+    logger.info("Pinecone client initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize Pinecone client: {e}")
+    pc = None
+
 vo = VoyageClient(api_key=os.getenv("VOYAGE_API_KEY"))
 model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=os.getenv("GOOGLE_API_KEY"))
 index_name = os.getenv("PINECONE_INDEX_NAME", "bills-index-dev")
@@ -91,8 +113,13 @@ class VoyageEmbeddings(Embeddings):
         return self.client.embed([text], model="voyage-3.5", input_type="query").embeddings[0]
 
 embeddings = VoyageEmbeddings(vo)
-vectorstore = PineconeVectorStore(index_name=index_name, embedding=embeddings, text_key="text")
-logger.info("Pinecone vectorstore initialized successfully")
+
+try:
+    vectorstore = PineconeVectorStore(index_name=index_name, embedding=embeddings, text_key="text")
+    logger.info("Pinecone vectorstore initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize Pinecone vectorstore: {e}")
+    vectorstore = None
 
 def query_db(bill_id: str) -> dict:
     return {"bill_id": bill_id, "content": "Mock bill details from DB"}
@@ -117,6 +144,15 @@ async def rag_query(request: QueryRequest):
         try:
             logger.info(f"Received query: {request.query}")
             
+            # Check if vectorstore is available
+            if vectorstore is None:
+                logger.error("Vectorstore is not initialized")
+                return {
+                    "query": request.query,
+                    "result": "The search service is currently unavailable. Please try again later.",
+                    "error": True
+                }
+            
             # Test Pinecone connection
             retriever = vectorstore.as_retriever()
             logger.info("Pinecone retriever created successfully")
@@ -133,23 +169,34 @@ async def rag_query(request: QueryRequest):
                     "documents_found": 0
                 }
             
+            # Log first few docs for debugging
+            for i, doc in enumerate(docs[:2]):
+                logger.info(f"Doc {i}: {doc.page_content[:100]}...")
+            
             # Create and run the chain
-            chain = RetrievalQA.from_chain_type(model, retriever=retriever)
+            chain = RetrievalQA.from_chain_type(
+                llm=model, 
+                chain_type="stuff",
+                retriever=retriever,
+                return_source_documents=True
+            )
             result = chain({"query": request.query})
             
             logger.info("RAG query completed successfully")
             return {
                 "query": request.query,
-                "result": result.get("result", result),
-                "documents_found": len(docs)
+                "result": result.get("result", "No result generated"),
+                "documents_found": len(docs),
+                "source_documents": len(result.get("source_documents", []))
             }
             
         except Exception as e:
-            logger.error(f"Error in RAG query: {str(e)}")
+            logger.error(f"Error in RAG query: {str(e)}", exc_info=True)
             return {
                 "query": request.query,
-                "result": f"Error processing your query: {str(e)}",
-                "error": True
+                "result": f"Sorry, I encountered an error while processing your request. Please try again.",
+                "error": True,
+                "error_details": str(e)
             }
 
 @app.post("/agent")

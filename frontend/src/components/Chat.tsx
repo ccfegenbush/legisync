@@ -169,7 +169,7 @@ export default function Chat() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyPress={handleKeyPress}
-              className="w-full p-3 pr-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              className="w-full p-3 pr-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-medium text-gray-900 placeholder-gray-500"
               placeholder="Ask about Texas bills... (Press Enter to send)"
               rows={1}
               disabled={isLoading}
