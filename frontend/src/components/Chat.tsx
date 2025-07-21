@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 interface Message {
   id: string;
@@ -20,11 +20,23 @@ interface BillResult {
   score?: number;
 }
 
-export default function Chat() {
-  const [query, setQuery] = useState("");
+interface ChatProps {
+  initialQuery?: string;
+  onQueryChange?: (query: string) => void;
+}
+
+export default function Chat({ initialQuery, onQueryChange }: ChatProps = {}) {
+  const [query, setQuery] = useState(initialQuery || "");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Notify parent when query changes
+  useEffect(() => {
+    if (onQueryChange) {
+      onQueryChange(query);
+    }
+  }, [query, onQueryChange]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -34,74 +46,89 @@ export default function Chat() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSubmit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!query.trim() || isLoading) return;
+  const handleSubmit = useCallback(
+    async (e?: React.FormEvent, customQuery?: string) => {
+      e?.preventDefault();
+      const queryToUse = customQuery || query;
+      if (!queryToUse.trim() || isLoading) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content: query.trim(),
-      isUser: true,
-      timestamp: new Date(),
-    };
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        content: queryToUse.trim(),
+        isUser: true,
+        timestamp: new Date(),
+      };
 
-    setMessages((prev) => [...prev, userMessage]);
-    setQuery("");
-    setIsLoading(true);
+      setMessages((prev) => [...prev, userMessage]);
+      if (!customQuery) setQuery(""); // Only clear if not using custom query
+      setIsLoading(true);
 
-    try {
-      const res = await fetch("/api/rag", {
-        method: "POST",
-        body: JSON.stringify({ query: userMessage.content }),
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      // Extract bill references from the response
-      const billPattern = /\*\*([HB|SB|HR|SR|HCR|SCR|HJR|SJR]+\s+\d+)\*\*/g;
-      const bills: BillResult[] = [];
-      let match;
-
-      while ((match = billPattern.exec(data.result)) !== null) {
-        bills.push({
-          bill_id: match[1],
-          title: "Click to view details", // Placeholder - could be enhanced with metadata
-          session: "891",
-          bill_type: match[1].split(" ")[0],
+      try {
+        const res = await fetch("/api/rag", {
+          method: "POST",
+          body: JSON.stringify({ query: userMessage.content }),
+          headers: { "Content-Type": "application/json" },
         });
+
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        // Extract bill references from the response
+        const billPattern = /\*\*([HB|SB|HR|SR|HCR|SCR|HJR|SJR]+\s+\d+)\*\*/g;
+        const bills: BillResult[] = [];
+        let match;
+
+        while ((match = billPattern.exec(data.result)) !== null) {
+          bills.push({
+            bill_id: match[1],
+            title: "Click to view details", // Placeholder - could be enhanced with metadata
+            session: "891",
+            bill_type: match[1].split(" ")[0],
+          });
+        }
+
+        const botMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: data.result || "I couldn't process your request.",
+          isUser: false,
+          timestamp: new Date(),
+          documentsFound: data.documents_found,
+          isError: data.error || false,
+          bills: bills,
+        };
+
+        setMessages((prev) => [...prev, botMessage]);
+      } catch (err) {
+        console.error("Chat error:", err);
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content:
+            "Sorry, I encountered an error processing your request. Please try again.",
+          isUser: false,
+          timestamp: new Date(),
+          isError: true,
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setIsLoading(false);
       }
+    },
+    [query, isLoading]
+  );
 
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: data.result || "I couldn't process your request.",
-        isUser: false,
-        timestamp: new Date(),
-        documentsFound: data.documents_found,
-        isError: data.error || false,
-        bills: bills,
-      };
-
-      setMessages((prev) => [...prev, botMessage]);
-    } catch (err) {
-      console.error("Chat error:", err);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content:
-          "Sorry, I encountered an error processing your request. Please try again.",
-        isUser: false,
-        timestamp: new Date(),
-        isError: true,
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
+  // Update query when initialQuery changes
+  useEffect(() => {
+    if (initialQuery && initialQuery !== query) {
+      setQuery(initialQuery);
+      // Auto-submit if there's an initial query and no messages yet
+      if (initialQuery.trim() && messages.length === 0) {
+        setTimeout(() => handleSubmit(undefined, initialQuery), 100);
+      }
     }
-  };
+  }, [initialQuery, query, messages.length, handleSubmit]);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {

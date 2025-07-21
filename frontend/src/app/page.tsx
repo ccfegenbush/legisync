@@ -1,7 +1,16 @@
 import Chat from "@/components/Chat";
 import BillFilters from "@/components/BillFilters";
+import ExampleQueries from "@/components/ExampleQueries";
 
 export default function Home() {
+  const handleExampleQuery = (query: string) => {
+    // For now, just scroll to chat - future enhancement can auto-populate
+    const chatElement = document.querySelector("textarea");
+    if (chatElement) {
+      chatElement.value = query;
+      chatElement.focus();
+    }
+  };
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
@@ -65,45 +74,7 @@ export default function Home() {
           </div>
 
           {/* Example Queries */}
-          <div className="bg-blue-50 rounded-xl p-6 mb-8">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Try these example queries:
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="bg-white rounded-lg p-3 text-left border border-blue-200">
-                <div className="text-sm font-medium text-gray-900">
-                  &ldquo;Education funding for public schools&rdquo;
-                </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  Find bills related to school finance
-                </div>
-              </div>
-              <div className="bg-white rounded-lg p-3 text-left border border-blue-200">
-                <div className="text-sm font-medium text-gray-900">
-                  &ldquo;Healthcare legislation for rural areas&rdquo;
-                </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  Discover rural healthcare initiatives
-                </div>
-              </div>
-              <div className="bg-white rounded-lg p-3 text-left border border-blue-200">
-                <div className="text-sm font-medium text-gray-900">
-                  &ldquo;Property tax relief measures&rdquo;
-                </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  Explore tax reduction proposals
-                </div>
-              </div>
-              <div className="bg-white rounded-lg p-3 text-left border border-blue-200">
-                <div className="text-sm font-medium text-gray-900">
-                  &ldquo;Environmental protection bills&rdquo;
-                </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  Find environmental legislation
-                </div>
-              </div>
-            </div>
-          </div>
+          <ExampleQueries onQueryClick={handleExampleQuery} />
         </div>
 
         {/* Search Filters */}
