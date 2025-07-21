@@ -32,6 +32,7 @@ app.add_middleware(
         "http://localhost:3001",  # Alternative Next.js port
         "http://127.0.0.1:3000",  # Alternative localhost format
         "http://127.0.0.1:3001",
+        "https://legisync-dev.vercel.app",  # Your deployed frontend
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -60,7 +61,7 @@ else:
 
 vo = VoyageClient(api_key=os.getenv("VOYAGE_API_KEY"))
 model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=os.getenv("GOOGLE_API_KEY"))
-index_name = "bills-index"
+index_name = os.getenv("PINECONE_INDEX_NAME", "bills-index-dev")
 
 # Create a proper embedding function for langchain
 from langchain_core.embeddings import Embeddings
