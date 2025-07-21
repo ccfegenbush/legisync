@@ -43,6 +43,7 @@ resource "vercel_project" "legisync_frontend" {
   git_repository = {
     type = "github"
     repo = var.github_repo
+    production_branch = "main"
   }
 
   # Build settings for Next.js in pnpm workspace
