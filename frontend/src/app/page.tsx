@@ -1,3 +1,5 @@
+"use client";
+
 import Chat from "@/components/Chat";
 import BillFilters from "@/components/BillFilters";
 import ExampleQueries from "@/components/ExampleQueries";

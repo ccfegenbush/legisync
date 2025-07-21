@@ -76,20 +76,22 @@ export default function Chat({ initialQuery, onQueryChange }: ChatProps = {}) {
 
         const data = await res.json();
 
-        // Extract bill references from the response
-        const billPattern = /\*\*([HB|SB|HR|SR|HCR|SCR|HJR|SJR]+\s+\d+)\*\*/g;
+        // Extract bill references from the response with a simpler approach
+        const billPattern = /(HB|SB|HR|SR|HCR|SCR|HJR|SJR)\s+(\d+)/g;
         const bills: BillResult[] = [];
         let match;
 
         while ((match = billPattern.exec(data.result)) !== null) {
+          const billType = match[1];
+          const billNumber = match[2];
+          const billId = `${billType} ${billNumber}`;
           bills.push({
-            bill_id: match[1],
+            bill_id: billId,
             title: "Click to view details", // Placeholder - could be enhanced with metadata
             session: "891",
-            bill_type: match[1].split(" ")[0],
+            bill_type: billType,
           });
         }
-
         const botMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: data.result || "I couldn't process your request.",
@@ -130,7 +132,7 @@ export default function Chat({ initialQuery, onQueryChange }: ChatProps = {}) {
     }
   }, [initialQuery, query, messages.length, handleSubmit]);
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -279,7 +281,7 @@ export default function Chat({ initialQuery, onQueryChange }: ChatProps = {}) {
             <textarea
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyDown}
               className="w-full p-3 pr-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-medium text-gray-900 placeholder-gray-500"
               placeholder="Ask about Texas bills... (Press Enter to send)"
               rows={1}

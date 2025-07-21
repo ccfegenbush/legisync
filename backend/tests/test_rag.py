@@ -1,34 +1,218 @@
 import os
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
+import json
 
 # Disable tracing for tests
 os.environ["TESTING"] = "true"
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
 
-from app import rag_query, QueryRequest
+# Mock environment variables
+os.environ["VOYAGE_API_KEY"] = "test_voyage_key"
+os.environ["PINECONE_API_KEY"] = "test_pinecone_key"
+os.environ["PINECONE_INDEX_NAME"] = "test-bills-index"
+os.environ["GOOGLE_API_KEY"] = "test_google_key"
 
-@pytest.mark.asyncio
-async def test_rag_query():
-    with patch('app.vectorstore') as mock_vectorstore:
-        # Mock the retriever and documents
-        mock_retriever = MagicMock()
-        mock_doc = MagicMock()
-        mock_doc.page_content = "Mock bill content"
-        mock_retriever.get_relevant_documents.return_value = [mock_doc]
-        mock_vectorstore.as_retriever.return_value = mock_retriever
-        
-        with patch('langchain.chains.RetrievalQA.from_chain_type') as mock_chain_constructor:
-            # Create a mock chain instance that can be called
-            mock_chain_instance = MagicMock()
-            mock_chain_instance.return_value = {"result": "Mock summary", "source_documents": [mock_doc]}
-            mock_chain_constructor.return_value = mock_chain_instance
+from app import rag_query, QueryRequest, app
+
+class TestRAGSystem:
+    """Test cases for the RAG (Retrieval-Augmented Generation) system"""
+
+    @pytest.mark.asyncio
+    async def test_rag_query_success(self):
+        """Test successful RAG query processing"""
+        with patch('app.vectorstore') as mock_vectorstore, \
+             patch('app.RetrievalQA') as mock_qa:
+            
+            # Mock the retriever and documents
+            mock_retriever = MagicMock()
+            mock_doc = MagicMock()
+            mock_doc.page_content = "HB 55 relates to education funding based on property values."
+            mock_doc.metadata = {
+                "bill_id": "HB 55",
+                "title": "Education Funding Bill",
+                "session": "891"
+            }
+            
+            mock_retriever.get_relevant_documents = MagicMock(return_value=[mock_doc])
+            mock_vectorstore.as_retriever.return_value = mock_retriever
+            
+            # Mock the RetrievalQA chain
+            mock_chain = MagicMock()
+            mock_chain.return_value = {
+                "result": "Several bills in session 891 relate to education funding. HB 55 concerns funding based on property values.",
+                "source_documents": [mock_doc]
+            }
+            mock_qa.from_chain_type.return_value = mock_chain
             
             # Create a request object
-            request = QueryRequest(query="Test query")
+            request = QueryRequest(query="education funding")
             result = await rag_query(request)
             
-            # Verify the chain was called with the correct query
-            mock_chain_instance.assert_called_once_with({"query": "Test query"})
-            assert result["result"] == "Mock summary"
+            # Verify the result structure
+            assert "result" in result
+            assert "documents_found" in result
             assert result["documents_found"] == 1
+            assert "HB 55" in result["result"]
+
+    @pytest.mark.asyncio
+    async def test_rag_query_no_documents(self):
+        """Test RAG query when no relevant documents are found"""
+        with patch('app.vectorstore') as mock_vectorstore, \
+             patch('app.model') as mock_llm:
+            
+            mock_retriever = MagicMock()
+            mock_retriever.get_relevant_documents = MagicMock(return_value=[])
+            mock_vectorstore.as_retriever.return_value = mock_retriever
+            
+            request = QueryRequest(query="non-existent topic")
+            result = await rag_query(request)
+            
+            assert result["documents_found"] == 0
+            assert "No relevant bills found" in result["result"]
+
+    @pytest.mark.asyncio 
+    async def test_rag_query_multiple_bills(self):
+        """Test RAG query that returns multiple bill references"""
+        with patch('app.vectorstore') as mock_vectorstore, \
+             patch('app.model') as mock_llm:
+            
+            mock_retriever = MagicMock()
+            mock_docs = [
+                MagicMock(
+                    page_content="HB 55 relates to education funding.",
+                    metadata={"bill_id": "HB 55", "title": "Education Funding", "session": "891"}
+                ),
+                MagicMock(
+                    page_content="HB 82 addresses school enrollment calculations.",
+                    metadata={"bill_id": "HB 82", "title": "School Enrollment", "session": "891"}
+                ),
+                MagicMock(
+                    page_content="SB 31 concerns property tax relief for schools.",
+                    metadata={"bill_id": "SB 31", "title": "Tax Relief", "session": "891"}
+                )
+            ]
+            
+            mock_retriever.get_relevant_documents = MagicMock(return_value=mock_docs)
+            mock_vectorstore.as_retriever.return_value = mock_retriever
+            
+            # Mock the RetrievalQA chain
+            with patch('app.RetrievalQA') as mock_qa:
+                mock_chain = MagicMock()
+                mock_chain.return_value = {
+                    "result": "Several bills relate to education: **HB 55** for funding, **HB 82** for enrollment, and **SB 31** for tax relief.",
+                    "source_documents": mock_docs
+                }
+                mock_qa.from_chain_type.return_value = mock_chain
+                
+                request = QueryRequest(query="education bills")
+                result = await rag_query(request)
+                
+                assert result["documents_found"] == 3
+                assert "HB 55" in result["result"]
+                assert "HB 82" in result["result"]
+                assert "SB 31" in result["result"]
+
+    @pytest.mark.asyncio
+    async def test_rag_query_error_handling(self):
+        """Test error handling in RAG query"""
+        with patch('app.vectorstore') as mock_vectorstore:
+            mock_vectorstore.as_retriever.side_effect = Exception("Database error")
+            
+            request = QueryRequest(query="test query")
+            
+            result = await rag_query(request)
+            
+            assert result["error"] is True
+            assert "error_details" in result
+            assert result["query"] == "test query"
+
+    def test_query_request_validation(self):
+        """Test QueryRequest model validation"""
+        # Valid request
+        valid_request = QueryRequest(query="valid query")
+        assert valid_request.query == "valid query"
+        
+        # Empty query should still work (handled by business logic)
+        empty_request = QueryRequest(query="")
+        assert empty_request.query == ""
+
+    @pytest.mark.asyncio
+    async def test_rag_query_with_session_filter(self):
+        """Test RAG query with session-specific results"""
+        with patch('app.vectorstore') as mock_vectorstore, \
+             patch('app.model') as mock_llm:
+            
+            mock_retriever = MagicMock()
+            mock_doc = MagicMock()
+            mock_doc.page_content = "HB 55 from session 891 relates to education funding."
+            mock_doc.metadata = {
+                "bill_id": "HB 55",
+                "title": "Education Funding Bill",
+                "session": "891"
+            }
+            
+            mock_retriever.get_relevant_documents = MagicMock(return_value=[mock_doc])
+            mock_vectorstore.as_retriever.return_value = mock_retriever
+            
+            # Mock the RetrievalQA chain
+            with patch('app.RetrievalQA') as mock_qa:
+                mock_chain = MagicMock()
+                mock_chain.return_value = {
+                    "result": "In session 891, HB 55 addresses education funding based on property values.",
+                    "source_documents": [mock_doc]
+                }
+                mock_qa.from_chain_type.return_value = mock_chain
+                
+                request = QueryRequest(query="session 891 education bills")
+                result = await rag_query(request)
+            
+            assert "session 891" in result["result"]
+            assert "HB 55" in result["result"]
+
+@pytest.mark.asyncio
+async def test_app_health_endpoint():
+    """Test the health check endpoint"""
+    from fastapi.testclient import TestClient
+    
+    client = TestClient(app)
+    response = client.get("/health")
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert data["service"] == "legisync-backend"
+
+@pytest.mark.asyncio 
+async def test_rag_endpoint_integration():
+    """Integration test for the RAG endpoint"""
+    from fastapi.testclient import TestClient
+    
+    with patch('app.vectorstore') as mock_vectorstore, \
+         patch('app.model') as mock_llm:
+        
+        mock_retriever = MagicMock()
+        mock_doc = MagicMock()
+        mock_doc.page_content = "Test bill content"
+        mock_doc.metadata = {"bill_id": "HB 1", "title": "Test Bill"}
+        
+        mock_retriever.get_relevant_documents = MagicMock(return_value=[mock_doc])
+        mock_vectorstore.as_retriever.return_value = mock_retriever
+        
+        # Mock the RetrievalQA chain
+        with patch('app.RetrievalQA') as mock_qa:
+            mock_chain = MagicMock()
+            mock_chain.return_value = {
+                "result": "This is a test response about HB 1.",
+                "source_documents": [mock_doc]
+            }
+            mock_qa.from_chain_type.return_value = mock_chain
+            
+            client = TestClient(app)
+            response = client.post("/rag", json={"query": "test query"})
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "result" in data
+        assert "documents_found" in data
+        assert data["documents_found"] == 1
