@@ -1,13 +1,23 @@
 # LegiSync Deployment Guide
 
-This guide will walk you through deploying LegiSync to production using Vercel (frontend) and Railway (backend).
+This guide will walk you through deploying LegiSync to prod```bash
+
+# 1. Get your Render backend URL (e.g., https://legisync-backend-prod.onrender.com)
+
+# Check your Render dashboard for the URL
+
+# 2. Update terraform variables
+
+# Edit iac/dev.tfvars or iac/prod.tfvars:
+
+backend_url = "https://your-render-url.onrender.com"using Vercel (frontend) and Render (backend).
 
 ## Architecture Overview
 
 ```
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
 │   Frontend  │    │   Backend   │    │  Pinecone   │
-│  (Vercel)   │───▶│ (Railway)   │───▶│ (Vector DB) │
+│  (Vercel)   │───▶│  (Render)   │───▶│ (Vector DB) │
 │  Next.js    │    │ FastAPI     │    │             │
 └─────────────┘    └─────────────┘    └─────────────┘
 ```
@@ -16,7 +26,7 @@ This guide will walk you through deploying LegiSync to production using Vercel (
 
 - GitHub repository with your code
 - Vercel account (free tier available)
-- Railway account (free tier available)
+- Render account (free tier available)
 - Pinecone account (free tier available)
 - Domain name (optional)
 
@@ -53,46 +63,24 @@ This will create:
 - Pinecone vector index
 - Environment variables configuration
 
-## Step 3: Deploy Backend to Railway
+## Step 3: Deploy Backend to Render
 
-### Option A: Using Railway CLI
+### Deploy via Render Dashboard
 
-```bash
-# 1. Install Railway CLI
-npm install -g @railway/cli
-
-# 2. Login to Railway
-railway login
-
-# 3. Navigate to backend directory
-cd ../backend/
-
-# 4. Initialize Railway project
-railway init
-
-# 5. Set environment variables
-railway variables set LANGCHAIN_TRACING_V2=true
-railway variables set LANGCHAIN_API_KEY=your_key
-railway variables set VOYAGE_API_KEY=your_key
-railway variables set PINECONE_API_KEY=your_key
-# ... set other API keys as needed
-
-# 6. Deploy
-railway up
-```
-
-### Option B: Using Railway Dashboard
-
-1. Go to https://railway.app/
-2. Create new project from GitHub
-3. Select your repository
-4. Choose the `backend/` folder as root
-5. Set environment variables in the dashboard
-6. Deploy
+1. Go to https://dashboard.render.com/
+2. Click "New" > "Web Service"
+3. Connect your GitHub repository
+4. Configure the service:
+   - **Name**: `legisync-backend-prod` (or `legisync-backend-dev`)
+   - **Root Directory**: `backend`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn app:app --host 0.0.0.0 --port $PORT`
+5. Set environment variables in the dashboard (see below)
+6. Click "Deploy"
 
 ### Environment Variables for Backend
 
-Set these in Railway dashboard:
+Set these in the Render dashboard under "Environment":
 
 ```
 LANGCHAIN_TRACING_V2=true
@@ -106,7 +94,7 @@ OPENAI_API_KEY=your_openai_key (optional)
 
 ## Step 4: Update Frontend with Backend URL
 
-After Railway deployment:
+After Render deployment:
 
 ```bash
 # 1. Get your Railway backend URL (e.g., https://backend-production-xxx.up.railway.app)
@@ -143,7 +131,7 @@ python ingest.py
 ## Step 6: Verify Deployment
 
 1. **Frontend**: Visit your Vercel URL
-2. **Backend**: Check https://your-backend-url.up.railway.app/health
+2. **Backend**: Check https://your-backend-url.onrender.com/health
 3. **Integration**: Test the chat functionality
 
 ## Step 7: Custom Domain (Optional)
@@ -154,30 +142,30 @@ python ingest.py
 2. Run `./deploy.sh prod`
 3. Configure DNS records as shown in Vercel dashboard
 
-### For Backend (Railway):
+### For Backend (Render):
 
-1. Go to Railway project settings
+1. Go to Render dashboard > Service settings
 2. Add custom domain
-3. Configure DNS records
+3. Configure DNS records as shown in Render
 
 ## Monitoring and Maintenance
 
 ### Logs
 
 - **Frontend**: Vercel dashboard → Functions tab
-- **Backend**: Railway dashboard → Deployments tab
+- **Backend**: Render dashboard → Logs tab
 - **Pinecone**: Pinecone console → Usage tab
 
 ### Scaling
 
 - **Frontend**: Automatically handled by Vercel
-- **Backend**: Configure in Railway dashboard or `railway.toml`
+- **Backend**: Configure scaling in Render dashboard
 - **Pinecone**: Serverless scales automatically
 
 ### Costs
 
 - **Vercel**: Free tier covers most small projects
-- **Railway**: $5/month after free trial
+- **Render**: Free tier available, $7/month for production
 - **Pinecone**: Free tier includes 100k vectors
 
 ## Troubleshooting
@@ -191,7 +179,7 @@ python ingest.py
 
 2. **Build Failures**
 
-   - Check build logs in Vercel/Railway dashboards
+   - Check build logs in Vercel/Render dashboards
    - Verify package.json dependencies
 
 3. **API Connection Issues**
@@ -208,7 +196,7 @@ python ingest.py
 ### Getting Help
 
 - **Vercel**: https://vercel.com/docs
-- **Railway**: https://docs.railway.app/
+- **Render**: https://render.com/docs
 - **Pinecone**: https://docs.pinecone.io/
 - **Terraform**: https://terraform.io/docs
 

@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: legisync-backend-dev
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    rootDir: backend
+    envVars:
+      - key: LANGCHAIN_TRACING_V2
+        value: true
+      - key: LANGCHAIN_API_KEY
+        fromService:
+          type: pserv
+          name: legisync-secrets
+          property: LANGCHAIN_API_KEY
+      - key: VOYAGE_API_KEY
+        fromService:
+          type: pserv
+          name: legisync-secrets
+          property: VOYAGE_API_KEY
+      - key: PINECONE_API_KEY
+        fromService:
+          type: pserv
+          name: legisync-secrets
+          property: PINECONE_API_KEY
+      - key: GOOGLE_API_KEY
+        fromService:
+          type: pserv
+          name: legisync-secrets
+          property: GOOGLE_API_KEY
+      - key: ANTHROPIC_API_KEY
+        fromService:
+          type: pserv
+          name: legisync-secrets
+          property: ANTHROPIC_API_KEY
+      - key: OPENAI_API_KEY
+        fromService:
+          type: pserv
+          name: legisync-secrets
+          property: OPENAI_API_KEY
+
+    healthCheckPath: /health
+
+  # Secret service to manage environment variables
+  - type: pserv
+    name: legisync-secrets
+    env: static
+    staticPublishPath: ./secrets

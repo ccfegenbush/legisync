@@ -92,7 +92,7 @@ if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
     
     echo
     print_status "Next steps:"
-    echo "1. Deploy your backend to Railway, Render, or another service"
+    echo "1. Deploy your backend to Render or another service"
     echo "2. Update the backend_url in ${ENVIRONMENT}.tfvars with your backend URL"
     echo "3. Run this script again to update the frontend with the correct backend URL"
     echo "4. Run your data ingestion script to populate the Pinecone index"
