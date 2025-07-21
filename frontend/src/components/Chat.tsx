@@ -8,6 +8,16 @@ interface Message {
   timestamp: Date;
   documentsFound?: number;
   isError?: boolean;
+  bills?: BillResult[];
+}
+
+interface BillResult {
+  bill_id: string;
+  title: string;
+  session?: string;
+  status?: string;
+  bill_type?: string;
+  score?: number;
 }
 
 export default function Chat() {
@@ -52,6 +62,20 @@ export default function Chat() {
 
       const data = await res.json();
 
+      // Extract bill references from the response
+      const billPattern = /\*\*([HB|SB|HR|SR|HCR|SCR|HJR|SJR]+\s+\d+)\*\*/g;
+      const bills: BillResult[] = [];
+      let match;
+
+      while ((match = billPattern.exec(data.result)) !== null) {
+        bills.push({
+          bill_id: match[1],
+          title: "Click to view details", // Placeholder - could be enhanced with metadata
+          session: "891",
+          bill_type: match[1].split(" ")[0],
+        });
+      }
+
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: data.result || "I couldn't process your request.",
@@ -59,6 +83,7 @@ export default function Chat() {
         timestamp: new Date(),
         documentsFound: data.documents_found,
         isError: data.error || false,
+        bills: bills,
       };
 
       setMessages((prev) => [...prev, botMessage]);
@@ -147,6 +172,41 @@ export default function Chat() {
                 }`}
               >
                 <p className="whitespace-pre-wrap">{message.content}</p>
+
+                {/* Bills Display */}
+                {message.bills && message.bills.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <div className="text-sm font-medium text-gray-700 mb-2">
+                      📋 Referenced Bills:
+                    </div>
+                    {message.bills.map((bill, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-white rounded-lg p-3 border border-gray-200 hover:border-blue-300 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                              {bill.bill_type}
+                            </span>
+                            <span className="font-semibold text-gray-900">
+                              {bill.bill_id}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Session {bill.session}
+                          </div>
+                        </div>
+                        {bill.title && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            {bill.title}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {message.documentsFound !== undefined &&
                   message.documentsFound > 0 && (
                     <div className="mt-2 text-xs text-gray-600 bg-gray-200 rounded px-2 py-1 inline-block">

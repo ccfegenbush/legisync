@@ -1,0 +1,18 @@
+{
+  "ingestion_date": "2025-07-21T17:59:28.028250",
+  "total_bills_processed": 148,
+  "total_vectors_created": 148,
+  "bill_types": {
+    "bill": 114,
+    "resolution": 19,
+    "concurrent resolution": 3,
+    "joint resolution": 12
+  },
+  "subjects": {},
+  "status_counts": {
+    "": 148
+  },
+  "session_info": {
+    "891": 148
+  }
+}
