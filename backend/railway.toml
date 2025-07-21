@@ -1,0 +1,30 @@
+# Railway Deployment Configuration for Backend
+# Place this in your backend/ directory
+
+# Build Configuration
+[build]
+builder = "NIXPACKS"
+
+# Environment Variables (set these in Railway dashboard)
+[env]
+PYTHON_VERSION = "3.13"
+PORT = "8000"
+
+# Health Check
+[health_check]
+path = "/health"
+port = 8000
+
+# Scaling
+[scaling]
+min_replicas = 1
+max_replicas = 3
+
+# Note: Set the following environment variables in Railway dashboard:
+# - LANGCHAIN_TRACING_V2=true
+# - LANGCHAIN_API_KEY=your_key
+# - VOYAGE_API_KEY=your_key  
+# - PINECONE_API_KEY=your_key
+# - GOOGLE_API_KEY=your_key
+# - ANTHROPIC_API_KEY=your_key
+# - OPENAI_API_KEY=your_key

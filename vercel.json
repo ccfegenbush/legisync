@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "name": "legisync",
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "frontend/src/app/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "frontend/$1"
+    }
+  ],
+  "env": {
+    "BACKEND_URL": "@backend_url"
+  },
+  "installCommand": "cd frontend && pnpm install",
+  "buildCommand": "cd frontend && pnpm build",
+  "devCommand": "cd frontend && pnpm dev",
+  "framework": "nextjs",
+  "outputDirectory": "frontend/.next"
+}
