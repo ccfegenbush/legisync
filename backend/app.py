@@ -14,8 +14,19 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from dotenv import load_dotenv
 import os
 from langchain_google_genai import ChatGoogleGenerativeAI
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
+
+# Log environment variable status (without exposing the actual keys)
+logger.info(f"PINECONE_API_KEY present: {bool(os.getenv('PINECONE_API_KEY'))}")
+logger.info(f"VOYAGE_API_KEY present: {bool(os.getenv('VOYAGE_API_KEY'))}")
+logger.info(f"GOOGLE_API_KEY present: {bool(os.getenv('GOOGLE_API_KEY'))}")
+logger.info(f"Index name: {os.getenv('PINECONE_INDEX_NAME', 'bills-index-dev')}")
 
 app = FastAPI()
 
@@ -63,6 +74,8 @@ vo = VoyageClient(api_key=os.getenv("VOYAGE_API_KEY"))
 model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=os.getenv("GOOGLE_API_KEY"))
 index_name = os.getenv("PINECONE_INDEX_NAME", "bills-index-dev")
 
+logger.info(f"Initializing Pinecone with index: {index_name}")
+
 # Create a proper embedding function for langchain
 from langchain_core.embeddings import Embeddings
 from typing import List
@@ -79,6 +92,7 @@ class VoyageEmbeddings(Embeddings):
 
 embeddings = VoyageEmbeddings(vo)
 vectorstore = PineconeVectorStore(index_name=index_name, embedding=embeddings, text_key="text")
+logger.info("Pinecone vectorstore initialized successfully")
 
 def query_db(bill_id: str) -> dict:
     return {"bill_id": bill_id, "content": "Mock bill details from DB"}
@@ -100,8 +114,43 @@ def optional_span(name: str):
 @traceable
 async def rag_query(request: QueryRequest):
     with optional_span("rag-query"):
-        chain = RetrievalQA.from_chain_type(model, retriever=vectorstore.as_retriever())
-        return chain({"query": request.query})
+        try:
+            logger.info(f"Received query: {request.query}")
+            
+            # Test Pinecone connection
+            retriever = vectorstore.as_retriever()
+            logger.info("Pinecone retriever created successfully")
+            
+            # Test retrieval
+            docs = retriever.get_relevant_documents(request.query)
+            logger.info(f"Retrieved {len(docs)} documents from Pinecone")
+            
+            if not docs:
+                logger.warning("No documents found for query")
+                return {
+                    "query": request.query,
+                    "result": "No relevant bills found for your query. Please try a different search term.",
+                    "documents_found": 0
+                }
+            
+            # Create and run the chain
+            chain = RetrievalQA.from_chain_type(model, retriever=retriever)
+            result = chain({"query": request.query})
+            
+            logger.info("RAG query completed successfully")
+            return {
+                "query": request.query,
+                "result": result.get("result", result),
+                "documents_found": len(docs)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in RAG query: {str(e)}")
+            return {
+                "query": request.query,
+                "result": f"Error processing your query: {str(e)}",
+                "error": True
+            }
 
 @app.post("/agent")
 @traceable
