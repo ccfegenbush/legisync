@@ -1,0 +1,16 @@
+fastapi==0.116.1
+uvicorn==0.35.0
+langchain==0.3.26
+langchain-community==0.3.27
+langgraph==0.5.3
+voyageai==0.3.3
+pinecone-client==6.0.0
+pytest==8.4.1
+ragas==0.3.0
+langsmith==0.4.8
+opentelemetry-api==1.35.0
+opentelemetry-sdk==1.35.0
+opentelemetry-exporter-otlp-proto-http==1.35.0
+google-generativeai==0.7.2
+python-dotenv==1.1.1
+pandas==2.2.3
