@@ -51,19 +51,19 @@ resource "vercel_project" "legisync_frontend" {
     repo = var.github_repo
   }
 
-  # Build settings
-  build_command    = "cd frontend && pnpm build"
-  dev_command      = "cd frontend && pnpm dev"
-  install_command  = "pnpm install"
-  output_directory = "frontend/.next"
-  root_directory   = "."
+  # Build settings for Next.js in pnpm workspace
+  build_command    = "pnpm build"
+  dev_command      = "pnpm dev" 
+  install_command  = "cd .. && pnpm install && cd frontend"
+  output_directory = ".next"
+  root_directory   = "frontend"
 
   # Environment variables for the frontend
   environment = [
     {
       key    = "BACKEND_URL"
       value  = var.backend_url
-      target = ["production", "preview"]
+      target = ["production", "preview", "development"]
     },
     {
       key    = "NEXT_PUBLIC_APP_ENV"
