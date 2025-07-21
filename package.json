@@ -11,7 +11,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev:frontend": "pnpm --filter @legisync/frontend dev",
+    "dev:backend": "pnpm --filter @legisync/backend dev",
+    "test": "pnpm -r test",
+    "build": "pnpm -r build",
+    "e2e": "pnpm --filter @legisync/frontend e2e",
+    "lint": "pnpm -r lint"
   },
   "keywords": [],
   "author": "",
