@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   const { query } = await request.json();
-  const res = await fetch("http://localhost:8000/rag", {
+  const backendUrl = process.env.BACKEND_URL || "http://localhost:8000";
+  const res = await fetch(`${backendUrl}/rag`, {
     method: "POST",
     body: JSON.stringify({ query }),
     headers: { "Content-Type": "application/json" },

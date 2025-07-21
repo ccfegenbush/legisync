@@ -1,5 +1,6 @@
 # backend/app.py
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_pinecone import PineconeVectorStore  # Updated import
 from langchain.chains import RetrievalQA
@@ -17,6 +18,20 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 load_dotenv()
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",  # Next.js default dev server
+        "http://localhost:3001",  # Alternative Next.js port
+        "http://127.0.0.1:3000",  # Alternative localhost format
+        "http://127.0.0.1:3001",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 # Request models for API endpoints
 class QueryRequest(BaseModel):
