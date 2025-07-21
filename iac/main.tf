@@ -47,11 +47,19 @@ resource "vercel_project" "legisync_frontend" {
   }
 
   # Build settings for Next.js in pnpm workspace
-  build_command    = "pnpm build"
-  dev_command      = "pnpm dev" 
-  install_command  = "cd .. && pnpm install && cd frontend"
+  build_command    = "pnpm --filter @legisync/frontend build"
+  dev_command      = "pnpm --filter @legisync/frontend dev" 
+  install_command  = "pnpm install"
   output_directory = ".next"
   root_directory   = "frontend"
+
+  # Ensure Git integration is enabled
+  git_fork_protection = true
+  
+  # Enable automatic deployments
+  vercel_authentication = {
+    deployment_type = "none"  # Allow public deployments
+  }
 
   # Environment variables for the frontend
   environment = [
