@@ -1,5 +1,6 @@
 # backend/app.py
 from fastapi import FastAPI
+from pydantic import BaseModel
 from langchain_pinecone import PineconeVectorStore  # Updated import
 from langchain.chains import RetrievalQA
 from langgraph.prebuilt import create_react_agent
@@ -16,6 +17,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 load_dotenv()
 
 app = FastAPI()
+
+# Request models for API endpoints
+class QueryRequest(BaseModel):
+    query: str
 
 # Configure tracing only when not in test mode
 is_testing = os.getenv("TESTING", "false").lower() == "true" or "pytest" in os.environ.get("_", "")
@@ -35,8 +40,24 @@ else:
 
 vo = VoyageClient(api_key=os.getenv("VOYAGE_API_KEY"))
 model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=os.getenv("GOOGLE_API_KEY"))
-index_name = "bills-index"  # Updated: string name
-vectorstore = PineconeVectorStore(index_name=index_name, embedding=vo.embed, text_key="text")  # Updated
+index_name = "bills-index"
+
+# Create a proper embedding function for langchain
+from langchain_core.embeddings import Embeddings
+from typing import List
+
+class VoyageEmbeddings(Embeddings):
+    def __init__(self, client: VoyageClient):
+        self.client = client
+    
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        return self.client.embed(texts, model="voyage-3.5", input_type="document").embeddings
+    
+    def embed_query(self, text: str) -> List[float]:
+        return self.client.embed([text], model="voyage-3.5", input_type="query").embeddings[0]
+
+embeddings = VoyageEmbeddings(vo)
+vectorstore = PineconeVectorStore(index_name=index_name, embedding=embeddings, text_key="text")
 
 def query_db(bill_id: str) -> dict:
     return {"bill_id": bill_id, "content": "Mock bill details from DB"}
@@ -56,14 +77,14 @@ def optional_span(name: str):
 
 @app.post("/rag")
 @traceable
-async def rag_query(query: str):
+async def rag_query(request: QueryRequest):
     with optional_span("rag-query"):
         chain = RetrievalQA.from_chain_type(model, retriever=vectorstore.as_retriever())
-        return chain({"query": query})
+        return chain({"query": request.query})
 
 @app.post("/agent")
 @traceable
-async def run_agent(query: str):
+async def run_agent(request: QueryRequest):
     with optional_span("agent-query"):
         agent = create_react_agent(model, tools)
-        return agent.invoke({"messages": [{"role": "user", "content": query}]})
+        return agent.invoke({"messages": [{"role": "user", "content": request.query}]})

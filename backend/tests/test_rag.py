@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 os.environ["TESTING"] = "true"
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
 
-from app import rag_query
+from app import rag_query, QueryRequest
 
 @pytest.mark.asyncio
 async def test_rag_query():
@@ -16,7 +16,9 @@ async def test_rag_query():
         mock_chain_instance.return_value = {"result": "Mock summary"}
         mock_chain_constructor.return_value = mock_chain_instance
         
-        result = await rag_query("Test query")
+        # Create a request object
+        request = QueryRequest(query="Test query")
+        result = await rag_query(request)
         
         # Verify the chain was called with the correct query
         mock_chain_instance.assert_called_once_with({"query": "Test query"})
