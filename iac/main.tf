@@ -33,12 +33,6 @@ resource "pinecone_index" "bills_index" {
       region = "us-east-1"
     }
   }
-
-  tags = {
-    Environment = var.environment
-    Project     = "legisync"
-    ManagedBy   = "terraform"
-  }
 }
 
 # Create Vercel project
@@ -74,12 +68,6 @@ resource "vercel_project" "legisync_frontend" {
 
   # Auto-assign domains
   auto_assign_custom_domains = true
-
-  tags = {
-    Environment = var.environment
-    Project     = "legisync"
-    ManagedBy   = "terraform"
-  }
 }
 
 # Custom domain (optional)
