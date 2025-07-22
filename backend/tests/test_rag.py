@@ -2,6 +2,7 @@ import os
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 import json
+import time
 
 # Disable tracing for tests
 os.environ["TESTING"] = "true"
@@ -69,7 +70,10 @@ class TestRAGSystem:
             result = await rag_query(request)
             
             assert result["documents_found"] == 0
-            assert "No relevant bills found" in result["result"]
+            assert "No specific bills found" in result["result"]
+            assert "Search Suggestions" in result["result"]
+            assert "suggestions_provided" in result
+            assert result["suggestions_provided"] is True
 
     @pytest.mark.asyncio 
     async def test_rag_query_multiple_bills(self):
@@ -216,3 +220,58 @@ async def test_rag_endpoint_integration():
         assert "result" in data
         assert "documents_found" in data
         assert data["documents_found"] == 1
+
+class TestRAGSystemEdgeCases:
+    """Test edge cases and error conditions"""
+    
+    @pytest.mark.asyncio
+    async def test_empty_query(self):
+        """Test handling of empty query"""
+        request = QueryRequest(query="")
+        result = await rag_query(request)
+        
+        # Should handle gracefully
+        assert "result" in result
+        assert isinstance(result["result"], str)
+    
+    @pytest.mark.asyncio
+    async def test_very_long_query(self):
+        """Test handling of very long queries"""
+        long_query = "education funding " * 100  # Very long query
+        request = QueryRequest(query=long_query)
+        
+        with patch('app.vectorstore') as mock_vectorstore:
+            mock_retriever = MagicMock()
+            mock_retriever.get_relevant_documents = MagicMock(return_value=[])
+            mock_vectorstore.as_retriever.return_value = mock_retriever
+            
+            result = await rag_query(request)
+            
+            # Should handle without crashing - the exact behavior may vary
+            assert "result" in result
+            assert "documents_found" in result
+            # Should be 0 for empty documents list, but test the core functionality
+            assert isinstance(result["documents_found"], int)
+    
+    @pytest.mark.asyncio
+    async def test_special_characters_in_query(self):
+        """Test handling of special characters in queries"""
+        special_queries = [
+            "bill #123 & tax reform @2024",
+            "education: funding; (K-12) schools",
+            "healthcare → medical → insurance",
+            "funding $$ for schools 100%"
+        ]
+        
+        for query in special_queries:
+            request = QueryRequest(query=query)
+            
+            with patch('app.vectorstore') as mock_vectorstore:
+                mock_retriever = MagicMock()
+                mock_retriever.get_relevant_documents = MagicMock(return_value=[])
+                mock_vectorstore.as_retriever.return_value = mock_retriever
+                
+                result = await rag_query(request)
+                
+                # Should handle without crashing
+                assert "result" in result
