@@ -39,10 +39,32 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
-      - name: Install dependencies
+      - name: Configure npm registry settings
         run: |
           cd ..
-          pnpm install
+          echo "registry=https://registry.npmjs.org/" >> .npmrc
+          echo "network-concurrency=1" >> .npmrc
+          echo "fetch-retry-maxtimeout=600000" >> .npmrc
+          echo "fetch-retry-mintimeout=10000" >> .npmrc
+          echo "maxsockets=1" >> .npmrc
+
+      - name: Install dependencies with retry and rate limiting
+        run: |
+          cd ..
+          # Add retry logic and rate limiting mitigation
+          for i in {1..5}; do
+            echo "🔄 Installation attempt $i..."
+            if pnpm install --network-concurrency 1 --no-frozen-lockfile; then
+              echo "✅ Dependencies installed successfully"
+              break
+            elif [ $i -eq 5 ]; then
+              echo "❌ All installation attempts failed"
+              exit 1
+            else
+              echo "⏳ Attempt $i failed, waiting $((i * 30)) seconds before retry..."
+              sleep $((i * 30))
+            fi
+          done
           cd frontend
 
       - name: Run build (skip tests for now)
@@ -114,10 +136,42 @@ jobs:
         with:
           version: 10.13.1
 
-      - name: Install dependencies
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Configure npm registry settings
         run: |
           cd ..
-          pnpm install
+          echo "registry=https://registry.npmjs.org/" >> .npmrc
+          echo "network-concurrency=1" >> .npmrc
+          echo "fetch-retry-maxtimeout=600000" >> .npmrc
+
+      - name: Install dependencies with retry and rate limiting
+        run: |
+          cd ..
+          # Add retry logic and rate limiting mitigation
+          for i in {1..5}; do
+            echo "🔄 Installation attempt $i..."
+            if pnpm install --network-concurrency 1 --no-frozen-lockfile; then
+              echo "✅ Dependencies installed successfully"
+              break
+            elif [ $i -eq 5 ]; then
+              echo "❌ All installation attempts failed"
+              exit 1
+            else
+              echo "⏳ Attempt $i failed, waiting $((i * 30)) seconds before retry..."
+              sleep $((i * 30))
+            fi
+          done
           cd frontend
 
       - name: Build application
