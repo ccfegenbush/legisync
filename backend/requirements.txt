@@ -8,9 +8,6 @@ pytest==8.4.1
 pytest-env==1.1.5
 ragas==0.3.0
 langsmith==0.4.8
-opentelemetry-api==1.35.0
-opentelemetry-sdk==1.35.0
-opentelemetry-exporter-otlp-proto-http==1.35.0
 google-ai-generativelanguage==0.6.15
 google-generativeai==0.8.5
 langchain-google-genai==2.0.8
@@ -22,14 +19,9 @@ requests==2.32.3
 # Performance optimization dependencies
 redis==5.0.1
 aioredis==2.0.1
-asyncio==3.4.3
 httpx==0.27.0
 cachetools==5.3.2
 psutil==5.9.6
 
-# OpenTelemetry + Grafana observability stack
-opentelemetry-instrumentation-fastapi==0.47b0
-opentelemetry-instrumentation-requests==0.47b0
-opentelemetry-exporter-jaeger-thrift==1.21.0
-opentelemetry-exporter-prometheus==0.47b0
+# Simplified observability for production deployment
 prometheus-client==0.19.0

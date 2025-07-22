@@ -65,7 +65,18 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python --version
+          pip --version
           pip install -r requirements.txt
+
+      - name: Debug Python environment
+        run: |
+          echo "Python path:"
+          python -c "import sys; print('\n'.join(sys.path))"
+          echo "Installed packages:"
+          pip list
+          echo "Testing app import:"
+          python -c "import os; os.environ['TESTING']='true'; from app import app; print('✅ App import successful')"
 
       - name: Run tests
         env:
@@ -76,7 +87,7 @@ jobs:
           GOOGLE_API_KEY: test_key
           TESTING: "true"
         run: |
-          python -m pytest -v || echo "Tests completed with some failures"
+          python -m pytest -v --tb=short || echo "Tests completed with some failures"
 
   e2e-tests:
     needs: [test-frontend, test-backend]
