@@ -8,9 +8,7 @@ from langgraph.prebuilt import create_react_agent
 from langchain_core.tools import Tool
 from voyageai import Client as VoyageClient
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter  # Your fix
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from dotenv import load_dotenv
 import os
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -22,10 +20,13 @@ import httpx
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any, List
+from datetime import datetime
+from fastapi.responses import Response
 from cache_service import cache_service
 from connection_pool import PineconeConnectionPool, pinecone_pool
 from embeddings_service import OptimizedEmbeddingsService, embeddings_service
 from performance_monitor import PerformanceMonitor, performance_monitor
+from observability_service_simple import observability
 import time
 
 # Set up logging
@@ -75,16 +76,16 @@ async def lifespan(app: FastAPI):
         )
         logger.info("✅ Optimized embeddings service initialized")
         
-        # Pre-warm cache with common queries
-        common_queries = [
-            "healthcare bill",
-            "education funding", 
-            "transportation infrastructure",
-            "environmental protection",
-            "tax reform"
-        ]
-        await embeddings_service.warm_cache(common_queries)
-        logger.info("✅ Embeddings cache warmed")
+        # Pre-warm cache with common queries (commented out for now)
+        # common_queries = [
+        #     "healthcare bill",
+        #     "education funding", 
+        #     "transportation infrastructure",
+        #     "environmental protection",
+        #     "tax reform"
+        # ]
+        # await embeddings_service.warm_cache(common_queries)
+        # logger.info("✅ Embeddings cache warmed")
     
     # Initialize HTTP client with connection pooling
     http_client = httpx.AsyncClient(
@@ -96,7 +97,15 @@ async def lifespan(app: FastAPI):
     await performance_monitor.start_monitoring(interval_seconds=60)
     logger.info("✅ Performance monitoring started")
     
+    # Initialize OpenTelemetry observability
+    observability.instrument_fastapi(app)
+    logger.info("✅ OpenTelemetry instrumentation enabled")
+    
     logger.info("🚀 LegisSync backend fully optimized and ready!")
+    logger.info("📊 Monitoring endpoints:")
+    logger.info("   • Performance: http://localhost:8000/admin/performance")
+    logger.info("   • Prometheus: http://localhost:8001/metrics")
+    logger.info("   • Health: http://localhost:8000/health")
     
     yield
     
@@ -122,6 +131,12 @@ logger.info(f"GOOGLE_API_KEY present: {bool(os.getenv('GOOGLE_API_KEY'))}")
 logger.info(f"Index name: {os.getenv('PINECONE_INDEX_NAME', 'bills-index-dev')}")
 
 app = FastAPI(lifespan=lifespan)
+
+# Add observability middleware early
+observability_middleware = observability.get_middleware()
+if observability_middleware:
+    app.middleware("http")(observability_middleware)
+    logger.info("✅ Observability middleware added")
 
 # Health check endpoint with cache stats
 @app.get("/health")
@@ -173,7 +188,6 @@ is_testing = os.getenv("TESTING", "false").lower() == "true" or "pytest" in os.e
 if not is_testing:
     from langsmith import traceable
     trace.set_tracer_provider(TracerProvider())
-    trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")))
     tracer = trace.get_tracer(__name__)
 else:
     # Use a no-op tracer and decorator for testing
@@ -264,6 +278,29 @@ async def rag_query(request: QueryRequest):
                     documents_found=documents_found,
                     error=False,
                     status_code=200
+                )
+                
+                # Record OpenTelemetry observability metrics for cache hit
+                observability.record_custom_metric(
+                    "rag_query_total",
+                    1,
+                    {
+                        "cache_hit": "true",
+                        "status": "success",
+                        "documents_found": str(documents_found)
+                    }
+                )
+                
+                observability.record_custom_metric(
+                    "rag_query_duration_ms",
+                    duration_ms,
+                    {"cache_hit": "true"}
+                )
+                
+                observability.record_custom_metric(
+                    "cache_hits_total",
+                    1,
+                    {"endpoint": "/rag"}
                 )
                 
                 logger.info(f"💾 Cache hit! Returning cached result ({duration_ms:.0f}ms)")
@@ -385,6 +422,29 @@ async def rag_query(request: QueryRequest):
                 status_code=200
             )
             
+            # Record OpenTelemetry observability metrics
+            observability.record_custom_metric(
+                "rag_query_total",
+                1,
+                {
+                    "cache_hit": "false",
+                    "status": "success",
+                    "documents_found": str(documents_found)
+                }
+            )
+            
+            observability.record_custom_metric(
+                "rag_query_duration_ms",
+                duration_ms,
+                {"cache_hit": "false"}
+            )
+            
+            observability.record_custom_metric(
+                "rag_documents_found",
+                documents_found,
+                {"query_type": "vector_search"}
+            )
+            
             logger.info(f"✅ RAG query completed successfully ({duration_ms:.0f}ms total)")
             return final_result
             
@@ -410,6 +470,26 @@ async def rag_query(request: QueryRequest):
                 documents_found=documents_found,
                 error=True,
                 status_code=500
+            )
+            
+            # Record OpenTelemetry observability error metrics
+            observability.record_custom_metric(
+                "rag_query_total",
+                1,
+                {
+                    "cache_hit": str(cache_hit).lower(),
+                    "status": "error",
+                    "error_type": type(e).__name__
+                }
+            )
+            
+            observability.record_custom_metric(
+                "rag_errors_total",
+                1,
+                {
+                    "endpoint": "/rag",
+                    "error_type": type(e).__name__
+                }
             )
             
             return error_result
@@ -459,39 +539,45 @@ async def clear_cache():
 
 # Performance monitoring endpoint
 @app.get("/admin/performance")
-async def get_performance_stats():
-    """Get comprehensive performance metrics for monitoring"""
-    cache_stats = await cache_service.get_cache_stats()
-    performance_summary = performance_monitor.get_performance_summary(hours=24)
-    real_time_stats = performance_monitor.get_real_time_stats()
-    
-    # Get embeddings service stats if available
-    embeddings_stats = embeddings_service.get_stats() if embeddings_service else None
-    
-    # Get Pinecone connection pool stats if available
-    pinecone_stats = pinecone_pool.get_stats() if pinecone_pool else None
-    
-    return {
-        "timestamp": time.time(),
-        "service": "legisync-backend-optimized",
-        "cache_stats": cache_stats,
-        "performance_summary": performance_summary,
-        "real_time_stats": real_time_stats,
-        "embeddings_service": embeddings_stats,
-        "pinecone_pool": pinecone_stats,
-        "thread_pool": {
-            "active_threads": len([t for t in thread_pool._threads if t.is_alive()]) if hasattr(thread_pool, '_threads') else 0,
-            "max_workers": thread_pool._max_workers
-        },
-        "http_client_active": http_client is not None,
-        "vectorstore_initialized": vectorstore is not None,
-        "optimization_status": {
-            "cache_service": cache_service is not None,
-            "embeddings_service": embeddings_service is not None,
-            "connection_pool": pinecone_pool is not None,
-            "performance_monitoring": performance_monitor is not None
+async def get_performance():
+    """Get current performance metrics"""
+    return performance_monitor.get_stats()
+
+
+@app.get("/metrics")
+async def get_prometheus_metrics():
+    """Prometheus metrics endpoint"""
+    return Response(
+        content=observability.get_metrics(),
+        media_type=observability.get_content_type()
+    )
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    health_data = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "1.0.0",
+        "services": {
+            "cache": cache_service.get_stats(),
+            "embeddings": embeddings_service.get_stats(),
+            "database": {
+                "status": "connected",
+                "active_connections": pinecone_pool.get_stats()["active_connections"]
+            }
         }
     }
+    
+    # Record health check metric
+    observability.record_custom_metric(
+        "health_check_total",
+        1,
+        {"status": "success"}
+    )
+    
+    return health_data
 
 # Real-time performance dashboard endpoint
 @app.get("/admin/performance/realtime")

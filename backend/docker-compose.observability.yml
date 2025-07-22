@@ -1,0 +1,96 @@
+# docker-compose.observability.yml
+# Cost-effective observability stack for LegisSync
+# Local development: FREE
+# Production: $5-20/month depending on hosting choice
+
+version: "3.8"
+
+services:
+  # Prometheus - Metrics storage and collection (FREE)
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: legisync-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--storage.tsdb.retention.time=30d" # Keep 30 days of data
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+    restart: unless-stopped
+    networks:
+      - observability
+
+  # Grafana - Visualization and dashboards (FREE)
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: legisync-grafana
+    ports:
+      - "3001:3000" # Using 3001 to avoid conflict with Next.js
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_DOMAIN=localhost
+      - GF_SMTP_ENABLED=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./observability/grafana/datasources:/etc/grafana/provisioning/datasources
+    restart: unless-stopped
+    networks:
+      - observability
+    depends_on:
+      - prometheus
+
+  # Jaeger - Distributed tracing (FREE)
+  jaeger:
+    image: jaegertracing/all-in-one:1.49
+    container_name: legisync-jaeger
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "14268:14268" # Jaeger Collector HTTP
+      - "6831:6831/udp" # Jaeger Agent UDP
+      - "6832:6832/udp" # Jaeger Agent UDP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
+      - MEMORY_MAX_TRACES=50000
+    restart: unless-stopped
+    networks:
+      - observability
+
+  # AlertManager - For production alerts (Optional for cost savings)
+  # alertmanager:
+  #   image: prom/alertmanager:v0.26.0
+  #   container_name: legisync-alertmanager
+  #   ports:
+  #     - "9093:9093"
+  #   volumes:
+  #     - ./observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+  #   restart: unless-stopped
+  #   networks:
+  #     - observability
+
+volumes:
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  observability:
+    driver: bridge
+# Cost breakdown:
+# - Local development: $0/month
+# - Self-hosted on $5 VPS: $5/month
+# - AWS t3.micro: ~$8/month
+# - With Grafana Cloud free tier: $0-5/month
+# - Full managed solution: $20-50/month
