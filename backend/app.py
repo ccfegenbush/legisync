@@ -462,14 +462,16 @@ Try rephrasing your question or using one of these broader topics.""",
                 with optional_span("llm-processing"):
                     loop = asyncio.get_event_loop()
                     
-                    # Use enhanced prompt template for better responses
-                    enhanced_prompt = f"""You are a helpful legislative research assistant for Texas bills and legislation. 
+                    # Create a clean, properly formatted custom prompt
+                    from langchain.prompts import PromptTemplate
+                    
+                    custom_prompt_template = """You are a helpful legislative research assistant for Texas bills and legislation. 
 Based on the following legislative documents, provide a comprehensive and accurate response.
 
 CONTEXT DOCUMENTS:
-{chr(10).join([f"Document {i+1}: {doc.page_content}" for i, doc in enumerate(docs)])}
+{context}
 
-USER QUERY: {request.query}
+USER QUERY: {question}
 
 RESPONSE GUIDELINES:
 1. **Direct Answer**: Start with a clear, direct answer
@@ -483,11 +485,9 @@ If multiple bills are relevant, prioritize by relevance and provide a structured
 
 RESPONSE:"""
 
-                    # Create custom RetrievalQA chain with enhanced prompt
-                    from langchain.prompts import PromptTemplate
                     custom_prompt = PromptTemplate(
                         input_variables=["context", "question"],
-                        template=enhanced_prompt.replace("{chr(10).join([f\"Document {i+1}: {doc.page_content}\" for i, doc in enumerate(docs)])}", "{context}").replace(f"{request.query}", "{question}")
+                        template=custom_prompt_template
                     )
                     
                     retriever = vectorstore.as_retriever()
