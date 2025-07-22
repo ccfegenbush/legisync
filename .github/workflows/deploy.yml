@@ -70,13 +70,18 @@ jobs:
           pip install -r requirements.txt
 
       - name: Debug Python environment
+        env:
+          TESTING: "true"
+          VOYAGE_API_KEY: test_key
+          PINECONE_API_KEY: test_key
+          GOOGLE_API_KEY: test_key
         run: |
           echo "Python path:"
           python -c "import sys; print('\n'.join(sys.path))"
           echo "Installed packages:"
           pip list
           echo "Testing app import:"
-          python -c "import os; os.environ['TESTING']='true'; from app import app; print('✅ App import successful')"
+          python -c "from app import app; print('✅ App import successful')"
 
       - name: Run tests
         env:

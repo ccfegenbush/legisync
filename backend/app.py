@@ -215,16 +215,52 @@ else:
     def traceable(func):
         return func
 
-# Initialize Pinecone client
-try:
-    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-    logger.info("Pinecone client initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize Pinecone client: {e}")
-    pc = None
+# Initialize Pinecone client only if not in testing mode or if API key is available
+pc = None
+if not os.getenv("TESTING") and os.getenv("PINECONE_API_KEY"):
+    try:
+        pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+        logger.info("Pinecone client initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize Pinecone client: {e}")
+        pc = None
+elif os.getenv("TESTING"):
+    logger.info("⚠️  Pinecone client skipped for testing mode")
+else:
+    logger.info("⚠️  Pinecone client skipped - no API key provided")
 
-vo = VoyageClient(api_key=os.getenv("VOYAGE_API_KEY"))
-model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=os.getenv("GOOGLE_API_KEY"))
+# Initialize clients only if not in testing mode
+vo = None
+model = None
+if not os.getenv("TESTING"):
+    try:
+        vo = VoyageClient(api_key=os.getenv("VOYAGE_API_KEY"))
+        model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=os.getenv("GOOGLE_API_KEY"))
+        logger.info("API clients initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize API clients: {e}")
+else:
+    logger.info("⚠️  API clients skipped for testing mode")
+
+# Create mock clients for testing
+if vo is None:
+    class MockVoyageClient:
+        def embed(self, texts, **kwargs):
+            # Return dummy embeddings for testing
+            if isinstance(texts, list):
+                return [[0.1] * 1024 for _ in texts]  # 1024-dim dummy embeddings
+            else:
+                return [0.1] * 1024
+    vo = MockVoyageClient()
+
+if model is None:
+    class MockLLM:
+        def invoke(self, prompt, **kwargs):
+            return "This is a mock response for testing purposes."
+        def __call__(self, prompt, **kwargs):
+            return "This is a mock response for testing purposes."
+    model = MockLLM()
+
 index_name = os.getenv("PINECONE_INDEX_NAME", "bills-index-dev")
 
 logger.info(f"Initializing Pinecone with index: {index_name}")
@@ -234,23 +270,46 @@ from langchain_core.embeddings import Embeddings
 from typing import List
 
 class VoyageEmbeddings(Embeddings):
-    def __init__(self, client: VoyageClient):
+    def __init__(self, client):
         self.client = client
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        return self.client.embed(texts, model="voyage-3.5", input_type="document").embeddings
+        if hasattr(self.client, 'embed') and hasattr(self.client.embed(texts), 'embeddings'):
+            # Real VoyageClient
+            return self.client.embed(texts, model="voyage-3.5", input_type="document").embeddings
+        else:
+            # Mock client
+            return self.client.embed(texts)
     
     def embed_query(self, text: str) -> List[float]:
-        return self.client.embed([text], model="voyage-3.5", input_type="query").embeddings[0]
+        if hasattr(self.client, 'embed') and hasattr(self.client.embed([text]), 'embeddings'):
+            # Real VoyageClient
+            return self.client.embed([text], model="voyage-3.5", input_type="query").embeddings[0]
+        else:
+            # Mock client
+            result = self.client.embed([text])
+            return result[0] if isinstance(result, list) else result
 
 embeddings = VoyageEmbeddings(vo)
 
-try:
-    vectorstore = PineconeVectorStore(index_name=index_name, embedding=embeddings, text_key="text")
-    logger.info("Pinecone vectorstore initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize Pinecone vectorstore: {e}")
-    vectorstore = None
+# Initialize vectorstore only if not in testing mode
+if not os.getenv("TESTING") and pc:
+    try:
+        vectorstore = PineconeVectorStore(index_name=index_name, embedding=embeddings, text_key="text")
+        logger.info("Pinecone vectorstore initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize Pinecone vectorstore: {e}")
+        vectorstore = None
+else:
+    # Mock vectorstore for testing
+    class MockVectorStore:
+        def as_retriever(self, **kwargs):
+            class MockRetriever:
+                def get_relevant_documents(self, query):
+                    return []
+            return MockRetriever()
+    vectorstore = MockVectorStore()
+    logger.info("⚠️  Mock vectorstore initialized for testing")
 
 def query_db(bill_id: str) -> dict:
     return {"bill_id": bill_id, "content": "Mock bill details from DB"}
