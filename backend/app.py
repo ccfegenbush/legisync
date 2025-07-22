@@ -43,6 +43,7 @@ except ImportError as e:
     performance_monitor = MockService()
     observability = MockService()
 
+from response_quality_monitor import response_quality_monitor
 import time
 
 # Set up logging
@@ -426,24 +427,118 @@ async def rag_query(request: QueryRequest):
                     return docs
             
             async def run_chain(docs):
-                """Async wrapper for chain processing with performance tracking"""
+                """Enhanced async wrapper for chain processing with custom prompts"""
                 if not docs:
+                    # Enhanced no-results response with suggestions
+                    suggestions = [
+                        "Try broader search terms (e.g., 'education' instead of specific program names)",
+                        "Check spelling of bill numbers or legislative terms",
+                        "Search for related topics like 'budget', 'appropriations', or 'reform'",
+                        "Consider different legislative sessions or time periods"
+                    ]
+                    
+                    suggestion_text = "\n• ".join(suggestions)
+                    
                     return {
                         "query": request.query,
-                        "result": "No relevant bills found for your query. Please try a different search term.",
-                        "documents_found": 0
+                        "result": f"""No specific bills found for your query: "{request.query}"
+
+**Search Suggestions:**
+• {suggestion_text}
+
+**Popular Topics to Explore:**
+• Education funding and school finance
+• Healthcare and Medicaid policy  
+• Transportation and infrastructure
+• Criminal justice reform
+• Environmental protection
+• Tax policy and property taxes
+
+Try rephrasing your question or using one of these broader topics.""",
+                        "documents_found": 0,
+                        "suggestions_provided": True
                     }
                 
                 with optional_span("llm-processing"):
                     loop = asyncio.get_event_loop()
+                    
+                    # Use enhanced prompt template for better responses
+                    enhanced_prompt = f"""You are a helpful legislative research assistant for Texas bills and legislation. 
+Based on the following legislative documents, provide a comprehensive and accurate response.
+
+CONTEXT DOCUMENTS:
+{chr(10).join([f"Document {i+1}: {doc.page_content}" for i, doc in enumerate(docs)])}
+
+USER QUERY: {request.query}
+
+RESPONSE GUIDELINES:
+1. **Direct Answer**: Start with a clear, direct answer
+2. **Specific References**: Always cite specific bill numbers (HB, SB) when available  
+3. **Session & Status**: Include legislative session and current status when known
+4. **Structure**: Use bullet points or numbered lists for multiple items
+5. **Accuracy**: Only use information from the provided documents
+6. **Helpful Format**: Make the response scannable and actionable
+
+If multiple bills are relevant, prioritize by relevance and provide a structured summary.
+
+RESPONSE:"""
+
+                    # Create custom RetrievalQA chain with enhanced prompt
+                    from langchain.prompts import PromptTemplate
+                    custom_prompt = PromptTemplate(
+                        input_variables=["context", "question"],
+                        template=enhanced_prompt.replace("{chr(10).join([f\"Document {i+1}: {doc.page_content}\" for i, doc in enumerate(docs)])}", "{context}").replace(f"{request.query}", "{question}")
+                    )
+                    
                     retriever = vectorstore.as_retriever()
                     chain = RetrievalQA.from_chain_type(
                         llm=model, 
                         chain_type="stuff",
                         retriever=retriever,
-                        return_source_documents=True
+                        return_source_documents=True,
+                        chain_type_kwargs={"prompt": custom_prompt}
                     )
+                    
                     result = await loop.run_in_executor(thread_pool, chain, {"query": request.query})
+                    
+                    # Enhanced post-processing
+                    if isinstance(result, dict) and "result" in result:
+                        enhanced_result = result["result"]
+                        
+                        # Add session information from document metadata
+                        sessions = set()
+                        bill_numbers = set()
+                        
+                        for doc in docs:
+                            if hasattr(doc, 'metadata'):
+                                if 'session' in doc.metadata:
+                                    sessions.add(doc.metadata['session'])
+                                if 'bill_id' in doc.metadata:
+                                    bill_numbers.add(doc.metadata['bill_id'])
+                        
+                        # Add session context if available
+                        if sessions:
+                            session_text = f"**Legislative Session(s):** {', '.join(sorted(sessions))}\n\n"
+                            enhanced_result = session_text + enhanced_result
+                        
+                        # Format bill numbers consistently
+                        import re
+                        bill_pattern = r'\b[HS][BJR]\s*\d+\b'
+                        bills_found = re.findall(bill_pattern, enhanced_result, re.IGNORECASE)
+                        for bill in bills_found:
+                            formatted_bill = f"**{bill.upper().replace(' ', ' ')}**"
+                            enhanced_result = enhanced_result.replace(bill, formatted_bill, 1)
+                        
+                        # Add document count context
+                        if len(docs) > 1:
+                            doc_context = f"*Based on {len(docs)} legislative documents:*\n\n"
+                            enhanced_result = doc_context + enhanced_result
+                        
+                        result["result"] = enhanced_result
+                        result["enhancement_applied"] = True
+                        result["bill_numbers_found"] = list(bill_numbers)
+                        result["sessions_referenced"] = list(sessions)
+                    
                     return result
             
             # Execute vector search
@@ -520,6 +615,19 @@ async def rag_query(request: QueryRequest):
             )
             
             logger.info(f"✅ RAG query completed successfully ({duration_ms:.0f}ms total)")
+            
+            # Monitor response quality
+            if PERFORMANCE_SERVICES_AVAILABLE:
+                quality_metrics = response_quality_monitor.analyze_response_quality(
+                    request.query, final_result
+                )
+                final_result["quality_metrics"] = {
+                    "overall_score": quality_metrics["overall_quality_score"],
+                    "grade": quality_metrics["quality_grade"],
+                    "improvement_suggestions": quality_metrics.get("top_improvement_areas", [])
+                }
+                logger.info(f"📊 Response quality: {quality_metrics['quality_grade']} ({quality_metrics['overall_quality_score']})")
+            
             return final_result
             
         except Exception as e:
@@ -612,6 +720,95 @@ async def clear_cache():
     return {"message": "Cache cleared successfully"}
 
 # Performance monitoring endpoint
+@app.get("/admin/response-quality")
+async def get_response_quality_analytics():
+    """Get response quality analytics and improvement insights"""
+    try:
+        analytics = response_quality_monitor.get_quality_analytics(time_window_hours=24)
+        
+        return {
+            "status": "success",
+            "analytics": analytics,
+            "insights": {
+                "overall_health": _assess_response_quality_health(analytics),
+                "recommendations": _get_quality_recommendations(analytics)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting response quality analytics: {e}")
+        return {"status": "error", "message": str(e)}
+
+def _assess_response_quality_health(analytics: dict) -> str:
+    """Assess overall response quality health"""
+    if "average_scores" not in analytics:
+        return "insufficient_data"
+    
+    overall_avg = analytics["average_scores"].get("avg_overall_quality_score", 0)
+    
+    if overall_avg >= 0.9:
+        return "excellent"
+    elif overall_avg >= 0.8:
+        return "good"
+    elif overall_avg >= 0.7:
+        return "satisfactory"  
+    elif overall_avg >= 0.6:
+        return "needs_improvement"
+    else:
+        return "poor"
+
+def _get_quality_recommendations(analytics: dict) -> list:
+    """Generate actionable recommendations for improving response quality"""
+    recommendations = []
+    
+    if "average_scores" not in analytics:
+        return ["Insufficient data - continue monitoring response quality"]
+    
+    avg_scores = analytics["average_scores"]
+    
+    # Check each dimension and provide specific recommendations
+    if avg_scores.get("avg_bill_specificity_score", 0) < 0.7:
+        recommendations.append({
+            "area": "Bill Specificity",
+            "issue": "Responses lack specific bill references",
+            "action": "Enhance document retrieval to prioritize bills with specific numbers and metadata",
+            "priority": "high"
+        })
+    
+    if avg_scores.get("avg_structure_score", 0) < 0.7:
+        recommendations.append({
+            "area": "Response Structure", 
+            "issue": "Responses are poorly formatted",
+            "action": "Improve prompt templates to emphasize bullet points and clear organization",
+            "priority": "medium"
+        })
+    
+    if avg_scores.get("avg_actionability_score", 0) < 0.7:
+        recommendations.append({
+            "area": "Actionability",
+            "issue": "Responses lack actionable information",
+            "action": "Include bill status, committee info, and next steps in responses",
+            "priority": "high"
+        })
+    
+    if avg_scores.get("avg_completeness_score", 0) < 0.7:
+        recommendations.append({
+            "area": "Completeness",
+            "issue": "Responses are incomplete or lack context",
+            "action": "Enhance document retrieval and expand context in responses",
+            "priority": "high"
+        })
+    
+    # If quality is generally good, provide optimization suggestions
+    if not recommendations:
+        recommendations.append({
+            "area": "Optimization",
+            "issue": "Response quality is good - focus on fine-tuning",
+            "action": "Continue monitoring and consider A/B testing different prompt variations",
+            "priority": "low"
+        })
+    
+    return recommendations
+
 @app.get("/admin/performance")
 async def get_performance():
     """Get current performance metrics"""
