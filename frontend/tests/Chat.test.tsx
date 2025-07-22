@@ -61,13 +61,13 @@ describe("Chat Component", () => {
     // Check if documents found indicator is displayed
     await waitFor(() => {
       expect(
-        screen.getByText("📄 Found 4 relevant documents")
+        screen.getByText("Found 4 relevant documents")
       ).toBeInTheDocument();
     });
 
     // Check if bill references are extracted and displayed
     await waitFor(() => {
-      expect(screen.getByText("📋 Referenced Bills:")).toBeInTheDocument();
+      expect(screen.getByText("Referenced Bills:")).toBeInTheDocument();
       expect(screen.getByText("HB 55")).toBeInTheDocument();
       expect(screen.getByText("HB 82")).toBeInTheDocument();
     });

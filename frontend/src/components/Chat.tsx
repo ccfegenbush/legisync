@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
+import BillDetailsModal from "./BillDetailsModal";
 
 interface Message {
   id: string;
@@ -29,6 +30,8 @@ export default function Chat({ initialQuery, onQueryChange }: ChatProps = {}) {
   const [query, setQuery] = useState(initialQuery || "");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedBill, setSelectedBill] = useState<BillResult | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Notify parent when query changes
@@ -87,7 +90,7 @@ export default function Chat({ initialQuery, onQueryChange }: ChatProps = {}) {
           const billId = `${billType} ${billNumber}`;
           bills.push({
             bill_id: billId,
-            title: "Click to view details", // Placeholder - could be enhanced with metadata
+            title: `${billId} - Legislative Bill`, // More descriptive title
             session: "891",
             bill_type: billType,
           });
@@ -141,6 +144,16 @@ export default function Chat({ initialQuery, onQueryChange }: ChatProps = {}) {
 
   const clearChat = () => {
     setMessages([]);
+  };
+
+  const handleBillClick = (bill: BillResult) => {
+    setSelectedBill(bill);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedBill(null);
   };
 
   return (
@@ -206,12 +219,13 @@ export default function Chat({ initialQuery, onQueryChange }: ChatProps = {}) {
                 {message.bills && message.bills.length > 0 && (
                   <div className="mt-4 space-y-2">
                     <div className="text-sm font-medium text-gray-700 mb-2">
-                      📋 Referenced Bills:
+                      Referenced Bills:
                     </div>
                     {message.bills.map((bill, idx) => (
                       <div
                         key={idx}
-                        className="bg-white rounded-lg p-3 border border-gray-200 hover:border-blue-300 transition-colors cursor-pointer"
+                        onClick={() => handleBillClick(bill)}
+                        className="bg-white rounded-lg p-3 border border-gray-200 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-2">
@@ -239,7 +253,7 @@ export default function Chat({ initialQuery, onQueryChange }: ChatProps = {}) {
                 {message.documentsFound !== undefined &&
                   message.documentsFound > 0 && (
                     <div className="mt-2 text-xs text-gray-600 bg-gray-200 rounded px-2 py-1 inline-block">
-                      📄 Found {message.documentsFound} relevant documents
+                      Found {message.documentsFound} relevant documents
                     </div>
                   )}
                 <div
@@ -346,6 +360,13 @@ export default function Chat({ initialQuery, onQueryChange }: ChatProps = {}) {
           </button>
         </form>
       </div>
+
+      {/* Bill Details Modal */}
+      <BillDetailsModal
+        bill={selectedBill}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+      />
     </div>
   );
 }

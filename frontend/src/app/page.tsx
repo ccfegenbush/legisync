@@ -1,17 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import Chat from "@/components/Chat";
 import BillFilters from "@/components/BillFilters";
 import ExampleQueries from "@/components/ExampleQueries";
 
 export default function Home() {
+  const [selectedQuery, setSelectedQuery] = useState<string>("");
+
   const handleExampleQuery = (query: string) => {
-    // For now, just scroll to chat - future enhancement can auto-populate
-    const chatElement = document.querySelector("textarea");
-    if (chatElement) {
-      chatElement.value = query;
-      chatElement.focus();
-    }
+    setSelectedQuery(query);
   };
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -86,13 +84,35 @@ export default function Home() {
 
         {/* Chat Component */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-200">
-          <Chat />
+          <Chat
+            initialQuery={selectedQuery}
+            onQueryChange={(query) => {
+              // Reset selectedQuery after it's been used to prevent auto-resubmission
+              if (query !== selectedQuery) {
+                setSelectedQuery("");
+              }
+            }}
+          />
         </div>
 
         {/* Feature Cards */}
         <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white rounded-xl p-6 border border-gray-200 hover:border-blue-300 transition-colors">
-            <div className="text-3xl mb-3">🤖</div>
+            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-3">
+              <svg
+                className="w-6 h-6 text-blue-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                />
+              </svg>
+            </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
               AI-Powered Search
             </h3>
@@ -103,7 +123,21 @@ export default function Home() {
           </div>
 
           <div className="bg-white rounded-xl p-6 border border-gray-200 hover:border-green-300 transition-colors">
-            <div className="text-3xl mb-3">⚡</div>
+            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-3">
+              <svg
+                className="w-6 h-6 text-green-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 10V3L4 14h7v7l9-11h-7z"
+                />
+              </svg>
+            </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
               Real-Time Data
             </h3>
@@ -114,7 +148,21 @@ export default function Home() {
           </div>
 
           <div className="bg-white rounded-xl p-6 border border-gray-200 hover:border-purple-300 transition-colors">
-            <div className="text-3xl mb-3">📊</div>
+            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
+              <svg
+                className="w-6 h-6 text-purple-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                />
+              </svg>
+            </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
               Comprehensive Analysis
             </h3>
@@ -149,36 +197,32 @@ export default function Home() {
               <div>
                 <div className="font-semibold text-gray-900">LegiSync</div>
                 <div className="text-sm text-gray-600">
-                  Powered by AI • Built with ❤️ for Texas
+                  AI-Powered Texas Legislative Search
                 </div>
               </div>
             </div>
 
             <div className="flex items-center space-x-6 text-sm text-gray-600">
               <a href="#" className="hover:text-blue-600 transition-colors">
-                📖 About
+                About
               </a>
               <a href="#" className="hover:text-blue-600 transition-colors">
-                🔧 API
+                API
               </a>
               <a href="#" className="hover:text-blue-600 transition-colors">
-                📞 Contact
+                Contact
               </a>
               <div className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
-                ✅ System Healthy
+                System Healthy
               </div>
             </div>
           </div>
-        </div>
-      </footer>
-
-      {/* Footer */}
-      <footer className="mt-16 border-t border-gray-200 bg-white/50">
-        <div className="max-w-4xl mx-auto px-6 py-6">
-          <p className="text-center text-gray-500 text-sm">
-            Built with Next.js, FastAPI, and Pinecone • Deployed on Vercel and
-            Render
-          </p>
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <p className="text-center text-gray-500 text-sm">
+              Built with Next.js, FastAPI, and Pinecone • Deployed on Vercel and
+              Render
+            </p>
+          </div>
         </div>
       </footer>
     </div>
