@@ -12,7 +12,7 @@ describe("BillFilters Component", () => {
   test("renders all filter options correctly", () => {
     render(<BillFilters onFilterChange={mockOnFilterChange} />);
 
-    expect(screen.getByText("🔍 Search Filters")).toBeInTheDocument();
+    expect(screen.getByText("Search Filters")).toBeInTheDocument();
     expect(screen.getByText("Bill Type")).toBeInTheDocument();
     expect(screen.getByText("Category")).toBeInTheDocument();
     expect(screen.getByText("Legislative Session")).toBeInTheDocument();

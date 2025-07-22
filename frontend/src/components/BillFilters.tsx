@@ -48,19 +48,19 @@ export default function BillFilters({ onFilterChange }: BillFiltersProps) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4">
-        🔍 Search Filters
+        Search Filters
       </h3>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Bill Type Filter */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-semibold text-gray-900 mb-2">
             Bill Type
           </label>
           <select
             value={filters.billType}
             onChange={(e) => handleFilterChange("billType", e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border text-gray-700 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             {billTypes.map((type) => (
               <option key={type.id} value={type.id}>
@@ -72,13 +72,13 @@ export default function BillFilters({ onFilterChange }: BillFiltersProps) {
 
         {/* Category Filter */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-semibold text-gray-900 mb-2">
             Category
           </label>
           <select
             value={filters.category}
             onChange={(e) => handleFilterChange("category", e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border text-gray-700 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             {categories.map((cat) => (
               <option key={cat.id} value={cat.id}>
@@ -90,13 +90,13 @@ export default function BillFilters({ onFilterChange }: BillFiltersProps) {
 
         {/* Session Filter */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-semibold text-gray-900 mb-2">
             Legislative Session
           </label>
           <select
             value={filters.session}
             onChange={(e) => handleFilterChange("session", e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border text-gray-700 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="891">89th Legislature (2025)</option>
             <option value="all">All Sessions</option>
@@ -106,7 +106,7 @@ export default function BillFilters({ onFilterChange }: BillFiltersProps) {
 
       {/* Quick Category Buttons */}
       <div className="mt-6">
-        <div className="text-sm font-medium text-gray-700 mb-3">
+        <div className="text-sm font-semibold text-gray-900 mb-3">
           Quick Categories:
         </div>
         <div className="flex flex-wrap gap-2">
