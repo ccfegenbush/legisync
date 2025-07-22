@@ -85,6 +85,11 @@ class PerformanceMonitor:
             "memory_usage": 85.0       # 85%
         }
     
+    @property
+    def monitoring_active(self) -> bool:
+        """Check if monitoring is currently active"""
+        return self._monitoring
+    
     def record_request(
         self,
         endpoint: str,
@@ -343,6 +348,35 @@ class PerformanceMonitor:
             json.dump(data, f, indent=2)
         
         logger.info(f"Metrics exported to {filepath}")
+    
+    def _get_current_stats(self) -> Dict[str, Any]:
+        """Get current performance statistics (alias for backward compatibility)"""
+        return self.get_real_time_stats()
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get comprehensive performance statistics"""
+        with self.request_lock:
+            # Calculate cache hit rate
+            total_cache_requests = self.stats["cache_hits"] + self.stats["cache_misses"]
+            hit_rate = self.stats["cache_hits"] / total_cache_requests if total_cache_requests > 0 else 0
+            
+            # Get recent requests for analysis
+            current_time = time.time()
+            recent_requests = [r for r in self.request_history 
+                             if current_time - r.timestamp < 3600]  # Last hour
+            
+            # Calculate requests per minute
+            minute_ago = current_time - 60
+            recent_minute_requests = [r for r in self.request_history 
+                                    if r.timestamp > minute_ago]
+            
+            return {
+                **self.stats,
+                "cache_hit_rate": hit_rate,
+                "requests_last_hour": len(recent_requests),
+                "requests_per_minute": len(recent_minute_requests),
+                "endpoint_breakdown": dict(self.endpoint_stats)
+            }
 
 # Global performance monitor instance
 performance_monitor = PerformanceMonitor()

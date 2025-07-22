@@ -45,6 +45,11 @@ class PineconeConnectionPool:
         
         logger.info(f"Pinecone connection pool initialized (max_connections: {max_connections})")
         
+    @property 
+    def _available(self):
+        """Get available connections (for backward compatibility)"""
+        return self._pool
+        
     async def _create_connection(self) -> Optional[Pinecone]:
         """Create a new Pinecone connection"""
         try:
@@ -123,9 +128,24 @@ class PineconeConnectionPool:
         return {
             **self._stats.copy(),
             "pool_size": len(self._pool),
+            "active_connections": len(self._in_use),
+            "available_connections": len(self._pool),
             "max_connections": self.max_connections,
             "pool_utilization": len(self._in_use) / self.max_connections if self.max_connections > 0 else 0
         }
+    
+    async def acquire_connection(self):
+        """Alias for get_connection for backward compatibility"""
+        return await self.get_connection()
+        
+    async def release_connection(self, connection):
+        """Release a connection back to the pool"""
+        async with self._lock:
+            if connection in self._in_use:
+                self._in_use.remove(connection)
+                if len(self._pool) < self.max_connections:
+                    self._pool.append(connection)
+                    self._stats["connections_reused"] += 1
     
     async def close(self):
         """Close all connections and cleanup"""

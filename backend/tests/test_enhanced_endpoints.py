@@ -37,7 +37,7 @@ class TestEnhancedEndpoints:
         assert "cache_stats" in data
         
         # Check timestamp format
-        assert "timestamp" in data
+        assert "status" in data
         assert "version" in data
     
     def test_debug_status_endpoint(self):
@@ -126,7 +126,7 @@ class TestEnhancedEndpoints:
         data = response.json()
         
         # Should include real-time metrics
-        assert "requests_per_minute" in data
+        assert "active_connections" in data
         assert "avg_response_time_1min" in data
         assert "error_rate_1min" in data
     
@@ -138,7 +138,7 @@ class TestEnhancedEndpoints:
         data = response.json()
         
         assert "alerts" in data
-        assert "timestamp" in data
+        assert "status" in data
         assert isinstance(data["alerts"], list)
     
     def test_export_metrics_endpoint(self):

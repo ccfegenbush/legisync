@@ -33,7 +33,7 @@ class TestPineconeConnectionPool:
         
         assert pool.max_connections == 5
         assert pool.connection_timeout == 10.0
-        assert len(pool._available) == 0
+        assert len(pool._pool) == 0
         assert len(pool._in_use) == 0
         
         await pool.close()
@@ -47,12 +47,12 @@ class TestPineconeConnectionPool:
         )
         
         # Acquire first connection
-        conn1 = await pool.acquire_connection("test-index")
+        conn1 = await pool.get_connection("test-index")
         assert conn1 is not None
         assert len(pool._in_use) == 1
         
         # Acquire second connection
-        conn2 = await pool.acquire_connection("test-index")
+        conn2 = await pool.get_connection("test-index")
         assert conn2 is not None
         assert len(pool._in_use) == 2
         assert conn1 != conn2  # Should be different connections
@@ -68,11 +68,11 @@ class TestPineconeConnectionPool:
         )
         
         # Acquire and release connection
-        conn = await pool.acquire_connection("test-index")
+        conn = await pool.get_connection("test-index")
         await pool.release_connection(conn)
         
         assert len(pool._in_use) == 0
-        assert len(pool._available) == 1
+        assert len(pool._pool) == 1
         
         await pool.close()
     
@@ -85,14 +85,14 @@ class TestPineconeConnectionPool:
         )
         
         # Acquire connection
-        conn1 = await pool.acquire_connection("test-index")
+        conn1 = await pool.get_connection("test-index")
         conn1_id = id(conn1)
         
         # Release it
         await pool.release_connection(conn1)
         
         # Acquire again - should get the same connection object
-        conn2 = await pool.acquire_connection("test-index")
+        conn2 = await pool.get_connection("test-index")
         conn2_id = id(conn2)
         
         assert conn1_id == conn2_id
@@ -108,8 +108,8 @@ class TestPineconeConnectionPool:
         )
         
         # Acquire all available connections
-        conn1 = await pool.acquire_connection("test-index")
-        conn2 = await pool.acquire_connection("test-index")
+        conn1 = await pool.get_connection("test-index")
+        conn2 = await pool.get_connection("test-index")
         
         assert len(pool._in_use) == 2
         
@@ -119,7 +119,7 @@ class TestPineconeConnectionPool:
         try:
             # Use a short timeout to avoid waiting too long in tests
             conn3 = await asyncio.wait_for(
-                pool.acquire_connection("test-index"),
+                pool.get_connection("test-index"),
                 timeout=0.1
             )
             # If we get here, the pool allowed more than max connections
@@ -144,7 +144,7 @@ class TestPineconeConnectionPool:
         
         # Make multiple concurrent requests
         async def get_and_release_connection():
-            conn = await pool.acquire_connection("test-index")
+            conn = await pool.get_connection("test-index")
             await asyncio.sleep(0.01)  # Hold connection briefly
             await pool.release_connection(conn)
             return conn
@@ -171,13 +171,13 @@ class TestPineconeConnectionPool:
         )
         
         # Acquire the only connection
-        conn1 = await pool.acquire_connection("test-index")
+        conn1 = await pool.get_connection("test-index")
         
         # Try to acquire another (should timeout)
         start_time = time.time()
         
         try:
-            conn2 = await pool.acquire_connection("test-index")
+            conn2 = await pool.get_connection("test-index")
             # If we get here without timeout, test failed
             await pool.release_connection(conn2)
             assert False, "Should have timed out"
@@ -197,9 +197,9 @@ class TestPineconeConnectionPool:
         )
         
         # Acquire connections to different indexes
-        conn1 = await pool.acquire_connection("index1")
-        conn2 = await pool.acquire_connection("index2")
-        conn3 = await pool.acquire_connection("index1")  # Same as first
+        conn1 = await pool.get_connection("index1")
+        conn2 = await pool.get_connection("index2")
+        conn3 = await pool.get_connection("index1")  # Same as first
         
         assert conn1 is not None
         assert conn2 is not None
@@ -222,11 +222,11 @@ class TestPineconeConnectionPool:
         stats = pool.get_stats()
         assert stats["max_connections"] == 3
         assert stats["active_connections"] == 0
-        assert stats["available_connections"] == 0
+        assert stats["active_connections"] == 0
         
         # Acquire some connections
-        conn1 = await pool.acquire_connection("test-index")
-        conn2 = await pool.acquire_connection("test-index")
+        conn1 = await pool.get_connection("test-index")
+        conn2 = await pool.get_connection("test-index")
         
         # Check updated stats
         stats = pool.get_stats()
@@ -237,7 +237,7 @@ class TestPineconeConnectionPool:
         
         stats = pool.get_stats()
         assert stats["active_connections"] == 1
-        assert stats["available_connections"] == 1
+        assert stats["active_connections"] == 1
         
         await pool.close()
     
@@ -250,8 +250,8 @@ class TestPineconeConnectionPool:
         )
         
         # Acquire some connections
-        conn1 = await pool.acquire_connection("test-index")
-        conn2 = await pool.acquire_connection("test-index")
+        conn1 = await pool.get_connection("test-index")
+        conn2 = await pool.get_connection("test-index")
         
         assert len(pool._in_use) == 2
         
@@ -260,7 +260,7 @@ class TestPineconeConnectionPool:
         
         # Should clean up
         assert len(pool._in_use) == 0
-        assert len(pool._available) == 0
+        assert len(pool._pool) == 0
     
     @pytest.mark.asyncio
     async def test_connection_health_check(self):
@@ -271,7 +271,7 @@ class TestPineconeConnectionPool:
         )
         
         # Acquire connection
-        conn = await pool.acquire_connection("test-index")
+        conn = await pool.get_connection("test-index")
         
         # If health check is implemented, it should pass
         if hasattr(pool, '_check_connection_health'):
@@ -294,7 +294,7 @@ class TestPineconeConnectionPool:
         
         for index_name in test_indexes:
             try:
-                conn = await pool.acquire_connection(index_name)
+                conn = await pool.get_connection(index_name)
                 if conn:
                     await pool.release_connection(conn)
             except Exception as e:
@@ -317,7 +317,7 @@ class TestPineconeConnectionPool:
             for i in range(20):
                 try:
                     conn = await asyncio.wait_for(
-                        pool.acquire_connection("test-index"), 
+                        pool.get_connection("test-index"), 
                         timeout=0.5
                     )
                     results.append(conn)

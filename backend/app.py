@@ -169,6 +169,8 @@ async def health_check():
     return {
         "status": "healthy", 
         "service": "legisync-backend",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "1.0.0",
         "cache_stats": cache_stats
     }
 
@@ -475,13 +477,13 @@ USER QUERY: {question}
 
 RESPONSE GUIDELINES:
 1. **Direct Answer**: Start with a clear, direct answer
-2. **Specific References**: Always cite specific bill numbers (HB, SB) when available  
+2. **Bill References**: Cite specific bill numbers (HB 55, SB 120, etc.) naturally in text - avoid excessive bold formatting
 3. **Session & Status**: Include legislative session and current status when known
-4. **Structure**: Use bullet points or numbered lists for multiple items
+4. **Clean Structure**: Use simple bullet points (•) or numbered lists, avoid excessive formatting
 5. **Accuracy**: Only use information from the provided documents
-6. **Helpful Format**: Make the response scannable and actionable
+6. **Natural Format**: Write in a clean, readable style without overuse of markdown formatting
 
-If multiple bills are relevant, prioritize by relevance and provide a structured summary.
+If multiple bills are relevant, prioritize by relevance and provide a clear, well-structured summary.
 
 RESPONSE:"""
 
@@ -516,22 +518,24 @@ RESPONSE:"""
                                 if 'bill_id' in doc.metadata:
                                     bill_numbers.add(doc.metadata['bill_id'])
                         
-                        # Add session context if available
+                        # Add session context if available (more subtle formatting)
                         if sessions:
-                            session_text = f"**Legislative Session(s):** {', '.join(sorted(sessions))}\n\n"
+                            session_text = f"*Legislative Session {', '.join(sorted(sessions))}*\n\n"
                             enhanced_result = session_text + enhanced_result
                         
-                        # Format bill numbers consistently
+                        # Format bill numbers consistently (but avoid double formatting)
                         import re
-                        bill_pattern = r'\b[HS][BJR]\s*\d+\b'
-                        bills_found = re.findall(bill_pattern, enhanced_result, re.IGNORECASE)
-                        for bill in bills_found:
-                            formatted_bill = f"**{bill.upper().replace(' ', ' ')}**"
-                            enhanced_result = enhanced_result.replace(bill, formatted_bill, 1)
+                        # Only format bill numbers that aren't already formatted
+                        bill_pattern = r'(?<!\*)\b([HS][BJR])\s*(\d+)\b(?!\*)'
+                        def format_bill(match):
+                            prefix = match.group(1).upper()
+                            number = match.group(2)
+                            return f"**{prefix} {number}**"
+                        enhanced_result = re.sub(bill_pattern, format_bill, enhanced_result, flags=re.IGNORECASE)
                         
-                        # Add document count context
+                        # Add document count context (more subtle)
                         if len(docs) > 1:
-                            doc_context = f"*Based on {len(docs)} legislative documents:*\n\n"
+                            doc_context = f"*Based on {len(docs)} documents*\n\n"
                             enhanced_result = doc_context + enhanced_result
                         
                         result["result"] = enhanced_result

@@ -112,6 +112,16 @@ class CacheService:
             
         return stats
     
+    def get_stats(self) -> Dict[str, Any]:
+        """Synchronous version of get_cache_stats for compatibility"""
+        return {
+            "memory_cache_size": len(self.memory_cache),
+            "memory_cache_maxsize": self.memory_cache.maxsize,
+            "similarity_cache_size": len(self.similarity_cache),
+            "redis_connected": False,
+            "cache_mode": "memory_only"
+        }
+    
     async def clear_cache(self, pattern: str = "rag:*"):
         """Clear memory cache"""
         self.memory_cache.clear()

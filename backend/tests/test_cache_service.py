@@ -122,7 +122,7 @@ class TestCacheService:
         stats = await cache.get_cache_stats()
         
         assert "memory_cache_size" in stats
-        assert "redis_available" in stats
+        assert "redis_connected" in stats
         assert stats["memory_cache_size"] >= 2
         
         await cache.close()

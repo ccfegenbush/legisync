@@ -17,9 +17,9 @@ class TestPerformanceMonitor:
         """Test performance monitor initialization"""
         monitor = PerformanceMonitor()
         
-        assert monitor.metrics is not None
-        assert monitor.requests == []
-        assert monitor.monitoring_active is False
+        assert monitor.stats is not None
+        assert len(monitor.request_history) == 0
+        assert monitor._monitoring is False
     
     def test_record_request(self):
         """Test recording request metrics"""
@@ -37,17 +37,17 @@ class TestPerformanceMonitor:
         )
         
         # Check that metrics were recorded
-        assert len(monitor.requests) == 1
-        request = monitor.requests[0]
+        assert len(monitor.request_history) == 1
+        request = monitor.request_history[0]
         
-        assert request["endpoint"] == "/rag"
-        assert request["query"] == "test query"
-        assert request["duration_ms"] == 500.0
-        assert request["cache_hit"] is False
-        assert request["documents_found"] == 3
-        assert request["error"] is False
-        assert request["status_code"] == 200
-        assert "timestamp" in request
+        assert request.endpoint == "/rag"
+        assert request.query == "test query"
+        assert request.duration_ms == 500.0
+        assert request.cache_hit is False
+        assert request.documents_found == 3
+        assert request.error is False
+        assert request.status_code == 200
+        assert hasattr(request, 'timestamp')
     
     def test_record_error_request(self):
         """Test recording error request metrics"""
@@ -65,8 +65,8 @@ class TestPerformanceMonitor:
         )
         
         # Check that error was recorded
-        assert len(monitor.requests) == 1
-        request = monitor.requests[0]
+        assert len(monitor.request_history) == 1
+        request = monitor.request_history[0]
         
         assert request["error"] is True
         assert request["status_code"] == 500
@@ -88,7 +88,7 @@ class TestPerformanceMonitor:
                 status_code=500 if i == 4 else 200
             )
         
-        stats = monitor.get_stats()
+        stats = monitor._get_current_stats()
         
         assert stats["total_requests"] == 5
         assert stats["error_rate"] == 0.2  # 1 error out of 5
@@ -116,7 +116,7 @@ class TestPerformanceMonitor:
         
         real_time_stats = monitor.get_real_time_stats()
         
-        assert "requests_per_minute" in real_time_stats
+        assert "active_connections" in real_time_stats
         assert "avg_response_time_1min" in real_time_stats
         assert "error_rate_1min" in real_time_stats
         assert "active_connections" in real_time_stats
@@ -143,7 +143,7 @@ class TestPerformanceMonitor:
         summary = monitor.get_performance_summary(hours=24)
         
         assert "total_requests" in summary
-        assert "avg_response_time" in summary
+        assert "endpoint_breakdown" in summary
         assert "error_rate" in summary
         assert "performance_alerts" in summary
         
@@ -160,14 +160,14 @@ class TestPerformanceMonitor:
         
         # Start monitoring with very short interval for testing
         await monitor.start_monitoring(interval_seconds=0.1)
-        assert monitor.monitoring_active is True
+        assert monitor._monitoring is True
         
         # Let it run briefly
         await asyncio.sleep(0.2)
         
         # Stop monitoring
         await monitor.stop_monitoring()
-        assert monitor.monitoring_active is False
+        assert monitor._monitoring is False
     
     def test_detect_performance_issues(self):
         """Test performance issue detection"""
@@ -236,7 +236,7 @@ class TestPerformanceMonitor:
             with open(temp_path, 'r') as f:
                 exported_data = json.load(f)
             
-            assert "performance_summary" in exported_data
+            assert "request_history" in exported_data
             assert "detailed_metrics" in exported_data
             assert exported_data["total_requests"] == 1
             

@@ -27,7 +27,11 @@ class OptimizedEmbeddingsService:
         self.client = VoyageClient(api_key=api_key)
         self.model = model
         self.batch_size = batch_size
+        self.max_workers = max_workers
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        
+        # Simple in-memory cache for backward compatibility with tests
+        self.cache = {}
         
         # Statistics tracking
         self.stats = {
@@ -40,6 +44,10 @@ class OptimizedEmbeddingsService:
         
         logger.info(f"Embeddings service initialized (model: {model}, batch_size: {batch_size})")
     
+    def _get_cache_key(self, text: str, input_type: str = "query") -> str:
+        """Generate cache key for embedding (backward compatibility)"""
+        return self._get_embedding_cache_key(text, input_type)
+    
     def _get_embedding_cache_key(self, text: str, input_type: str = "query") -> str:
         """Generate cache key for embedding"""
         content = f"{text}:{input_type}:{self.model}"
@@ -49,10 +57,18 @@ class OptimizedEmbeddingsService:
         """Embed a single query with caching"""
         cache_key = self._get_embedding_cache_key(text, "query")
         
-        # Check cache first
+        # Check simple cache first (for tests)
+        if cache_key in self.cache:
+            self.stats["cache_hits"] += 1
+            logger.debug(f"Embedding cache hit for query: {text[:50]}...")
+            return self.cache[cache_key]
+        
+        # Check advanced cache
         cached_embedding = await cache_service.get_cached_result(cache_key)
         if cached_embedding and "embedding" in cached_embedding:
             self.stats["cache_hits"] += 1
+            # Store in simple cache too
+            self.cache[cache_key] = cached_embedding["embedding"]
             logger.debug(f"Embedding cache hit for query: {text[:50]}...")
             return cached_embedding["embedding"]
         
@@ -65,7 +81,8 @@ class OptimizedEmbeddingsService:
                 lambda: self.client.embed([text], model=self.model, input_type="query").embeddings[0]
             )
             
-            # Cache the result
+            # Cache the result in both caches
+            self.cache[cache_key] = embedding
             await cache_service.set_cached_result(cache_key, {"embedding": embedding})
             
             self.stats["embeddings_created"] += 1
